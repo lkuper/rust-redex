@@ -16,9 +16,6 @@
   ;; Rust vectors, in which either the entire vector is mutable or it
   ;; isn't).  We're not modeling any mutability information yet.
 
-  ;; In Rust, functions carry an effect annotation (pure, impure, or
-  ;; unsafe) which we're also not modeling yet.
-
   ;; Expressions
   (Expr Lit (Op Expr Expr ...) (fn Ty Var -> Ty { Expr }) (tup Expr ...)
         (Expr Expr) (let Ty LVal = Expr))
@@ -32,7 +29,7 @@
   ;; number.
 
   ;; LVals
-  (LVal Var (index (tup Val ...) number))
+  (LVal Var (index (tup Value ...) number))
   ;; In real Rust, lvals (things on the left side of an assignment)
   ;; can include paths (the namespacey generalization of variables),
   ;; fields (of records and objects), indices (of vectors and tuples),
