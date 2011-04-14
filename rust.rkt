@@ -4,7 +4,6 @@
 (define-language baby-rust
   ;; Base types
   (BaseTy int bool)
-  ;; baby-rust only has one base type, int.
   
   ;; Types
   (Ty BaseTy (Ty -> Ty) (Tup Ty ...) (Box Ty))
@@ -18,21 +17,22 @@
   ;; isn't).  We're not modeling any mutability information yet.
 
   ;; In Rust, functions carry an effect annotation (pure, impure, or
-  ;; unsafe) which we're not modeling yet.
+  ;; unsafe) which we're also not modeling yet.
 
   ;; Expressions
   (Expr Lit (Op Expr Expr ...) (fn Ty Var -> Ty { Expr }) (tup Expr ...)
         (Expr Expr) (let Ty LVal = Expr))
-  ;; baby-rust expressions include literals, unary expressions, binary
-  ;; expressions, functions, tuples, tuple indices, "call expressions"
-  ;; (applications), and assignments.  In this model, functions can
-  ;; only take one argument.
+  (Op Unary Binary)
+  ;; baby-rust expressions include literals, unary and binary
+  ;; operations (which include tuple indexing operations), functions,
+  ;; tuples, "call expressions" (applications), and assignments.  In
+  ;; this model, functions can only take one argument.
 
   ;; Tuple indices can be expressions, but they have to evaluate to a
   ;; number.
 
   ;; LVals
-  (Lval Var (index (tup Val ...) number))
+  (LVal Var (index (tup Val ...) number))
   ;; In real Rust, lvals (things on the left side of an assignment)
   ;; can include paths (the namespacey generalization of variables),
   ;; fields (of records and objects), indices (of vectors and tuples),
@@ -52,8 +52,6 @@
             (EvalCtxt Binary Expr)
             (Value Binary EvalCtxt)
             (tup Value ... EvalCtxt Expr ...))
-
-  (Op Unary Binary)
 
   ;; Unary expressions
   (Unary box deref index neg not)
