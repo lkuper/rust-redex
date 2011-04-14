@@ -1,2 +1,28 @@
 rust-redex: A PLT Redex model of (a very, very small subset of) the
 Rust programming language.
+
+Why bother to create a model of Rust?
+
+  * By creating a model, we create notation, and notation can become
+    the basis with which people sketch ideas, so that we have a common
+    language of reasoning about Rust; "even if we don't use formal
+    methods, they can guide our informal methods of reasoning" --
+    dherman
+
+  * With regard to proposed language features, people sometimes say,
+    "Feature X?  I don't even know what that would mean in Rust."  A
+    model could help us figure out what Feature X would mean, without
+    having to actually implement it in Rust proper.  By itself, the
+    model won't prove that a proposed feature will work as intended,
+    but using the model we might be able to demonstrate that it
+    *won't* work as intended, avoiding an expensive mistake.
+
+  * People also sometimes say, "I didn't realize that such-and-such
+    was legal Rust code until I happened to be hacking on the parser
+    today."  One shouldn't have to look at the implementation of the
+    parser to know what the syntax of Rust is.  Right now, the
+    distinction is somewhat academic since pretty much all Rust users
+    are also Rust implementors, but (hopefully) it won't be that way
+    forever.  We don't expect users to necessarily play with the Redex
+    model, but from Redex we can get pretty pictures, grammars, and
+    such that can go in the documentation that users read.
