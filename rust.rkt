@@ -2,32 +2,37 @@
 (require redex)
 
 (define-language baby-rust
+
+  ;; TODO: Figure out how to model the heap and stack.
   
   ;; Programs
   (Program (Item ... Main))
-  ;; A baby-rust program comprises zero or more top-level Items
-  ;; followed by a Main expression, which is just a distinguished kind
-  ;; of function.
+  ;; A baby-rust program comprises zero or more Items followed by a
+  ;; Main expression.
 
   ;; Items
-  (Item Fn Ty)
-  ;; In Rust, 'items' include modules, functions, iterators, objects,
-  ;; and types.  We're just modeling functions and types right now.  A
-  ;; better word for these might be 'definitions'.  In Rust, since
-  ;; modules can nest, items aren't entirely top-level, but they're
-  ;; top-level within a module.  But for us, since we're not modeling
-  ;; modules yet, our Items really are top-level.
+  (Item Fn TyDefn)
+  ;; In Rust, 'items' include modules, function definitions,
+  ;; iterators, objects, and type definitions.  We're just modeling
+  ;; function and type definitions right now.  ('Definitions' might be
+  ;; a better word than 'items' for everything in this syntactic
+  ;; category.)
+
+  ;; In Rust, since modules can nest, items aren't entirely top-level,
+  ;; just top-level within a module.  But in baby-rust, since we're
+  ;; not modeling modules yet, our Items really are top-level.
+
+  ;; Type declarations
+  (TyDefn (type Var = Ty))
 
   ;; Functions
-  (Fn (fn Ty Var -> Ty { Expr }))
+  (Fn (fn Var = Ty Var -> Ty { Expr }))
   ;; This just exists so I don't have to write out (fn ... ) in as
   ;; many places.  Note that in baby-rust, functions can only take one
   ;; argument.
 
   ;; Main expressions
-  (Main Fn)
-  ;; TODO: is there some special subset of functions that Main can be?
-  ;; Is its type constrained at all?
+  (Main (main Expr))
   
   ;; Base types
   (BaseTy int bool)
@@ -44,13 +49,23 @@
   ;; isn't).  We're not modeling any mutability information yet.
 
   ;; Expressions
-  (Expr Lit (Op Expr Expr ...) (tup Expr ...) (Expr Expr)
-        (let Ty LVal = Expr))
+  (Expr Lit
+        (Unary Expr)
+        (Expr Binary Expr)
+        (tup Expr ...)
+        (Expr Expr)
+        (let Ty LVal = Expr)
+        Var
+        Index)
   
-  (Op Unary Binary)
   ;; baby-rust expressions include literals, unary and binary
-  ;; operations (which include tuple indexing operations), functions,
-  ;; tuples, "call expressions" (applications), and assignments.
+  ;; operations, tuples, "call expressions" (applications),
+  ;; assignments, "path expressions" (variables), and index
+  ;; expressions.
+
+  ;; Unops and binops
+  (Op Unary Binary)
+  ;; Convenient for defining lookup-op.
   
   ;; LVals
   (LVal Var Index)
@@ -61,9 +76,8 @@
   ;; self-methods (self.foo).  We don't have any of those things in
   ;; our model except for variables and tuple indices.
 
-  ;; TODO: Do we really want Index here, or do we just want Expr?  An
-  ;; arbitrary expression could evaluate to an Index expression,
-  ;; right?
+  ;; TODO: Do we really just want Expr here?  An arbitrary expression
+  ;; could evaluate to an Index expression, right?
 
   ;; Type environments
   (gamma empty (gamma Var Ty))
@@ -117,7 +131,7 @@
 
    ;; TODO: This isn't right.  Before we model reduction we're going
    ;; to have to model the heap and stack.  See: \gc?
-   (---> ((fn Ty Var -> Ty { Expr }) Value)
+   (---> ((fn Var_1 Ty Var_2 -> Ty { Expr }) Value)
          (subst Var Value Expr))
    
    (---> (Op Value)
@@ -219,7 +233,7 @@
 
 ;; Tests
 
-(define (test-suite)
+(define (expr-test-suite)
   (test-->> baby-rust-red
             (term 3)
             (term 3))
@@ -283,6 +297,17 @@
   (test-->> baby-rust-red
             (term (index (tup true false (index (tup true false true) 2)) 2))
             (term true))
+
+  (test-results))
+
+(define (program-test-suite)
+  
+  (test-->> baby-rust-red
+            ;; TODO: Implement how to evaluate this!
+            (term ((fn f = int x -> int { (x + 1) })
+                   (type x = int)
+                   (main (f 3))))
+            (term 4))
 
   (test-results))
 
