@@ -71,23 +71,24 @@
   ;; variables to types.
 
   ;; Values
-  (Value Lit (tup Value ...))
+  (Value Lit (tup Value ...) (box Value))
 
   ;; Evaluation contexts
   (EvalCtxt hole
             (EvalCtxt Expr)
             (Value EvalCtxt)
             (Unary EvalCtxt)
-            (Binary EvalCtxt Expr)
-            (Binary Value EvalCtxt)
+            (EvalCtxt Binary Expr)
+            (Value Binary EvalCtxt)
             (tup Value ... EvalCtxt Expr ...)
+            (deref EvalCtxt)
+            (box EvalCtxt)
             (index (tup EvalCtxt ...) Expr)
             (index Value EvalCtxt))
 
   ;; Unary expressions
-  (Unary box deref neg not)
-  ;; A few of what Rust offers.  NB: Lower-case 'box' is term-level
-  ;; box, rather than the type Box.
+  (Unary neg not)
+  ;; A few of what Rust offers.
 
   ;; Binary expressions
   (Binary + - *)
@@ -122,11 +123,14 @@
    (---> (Op Value)
          (lookup-op Op Value))
 
-   (---> (Op Value_1 Value_2)
+   (---> (Value_1 Op Value_2)
          (lookup-op Op Value_1 Value_2))
 
    (---> (index (tup Value ...) number)
          ,(list-ref (term (Value ...)) (term number)))
+
+   (---> (deref (box Value))
+         Value)
    
    with
    [(--> (in-hole EvalCtxt a) (in-hole EvalCtxt b)) (---> a b)]))
@@ -138,9 +142,7 @@
   [(lookup-op * number_1 number_2) ,(* (term number_1) (term number_2))]
   [(lookup-op neg number) ,(- (term number))]
   [(lookup-op not true) false]
-  [(lookup-op not false) true]
-  [(lookup-op box Value) (box Value)]
-  [(lookup-op deref (box Value)) Value])
+  [(lookup-op not false) true])
 
 (define-metafunction baby-rust
   typeck : gamma Expr/Fn -> Ty/illtyped
@@ -223,7 +225,15 @@
             (term 3))
 
   (test-->> baby-rust-red
-            (term (+ 3 3))
+            (term (3 + 3))
+            (term 6))
+
+  (test-->> baby-rust-red
+            (term (3 + (2 + 1)))
+            (term 6))
+
+  (test-->> baby-rust-red
+            (term ((3 + 2) + 1))
             (term 6))
 
   (test-->> baby-rust-red
@@ -233,6 +243,14 @@
   (test-->> baby-rust-red
             (term (not true))
             (term false))
+
+  (test-->> baby-rust-red
+            (term (deref (box 3)))
+            (term 3))
+
+  (test-->> baby-rust-red
+            (term (deref (box (3 + 3))))
+            (term 6))
 
   (test-results))
 
