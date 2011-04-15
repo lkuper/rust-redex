@@ -83,7 +83,7 @@
             (tup Value ... EvalCtxt Expr ...)
             (deref EvalCtxt)
             (box EvalCtxt)
-            (index (tup EvalCtxt ...) Expr)
+            (index (tup Value ... EvalCtxt Expr ...) Expr)
             (index Value EvalCtxt))
 
   ;; Unary expressions
@@ -251,6 +251,38 @@
   (test-->> baby-rust-red
             (term (deref (box (3 + 3))))
             (term 6))
+
+  (test-->> baby-rust-red
+            (term (deref (box (not (not false)))))
+            (term false))
+
+  (test-->> baby-rust-red
+            (term (tup 1 2 3))
+            (term (tup 1 2 3)))
+
+  (test-->> baby-rust-red
+            (term (tup 1 2 (3 + 3)))
+            (term (tup 1 2 6)))
+
+  (test-->> baby-rust-red
+            (term (index (tup 1 2 (3 + 3)) 0))
+            (term 1))
+
+  (test-->> baby-rust-red
+            (term (index (tup 1 2 (3 + 3)) 2))
+            (term 6))
+
+  (test-->> baby-rust-red
+            (term (tup true false (index (tup true false true) 2)))
+            (term (tup true false true)))
+
+  (test-->> baby-rust-red
+            (term (index (tup true false (index (tup true false true) 2)) 0))
+            (term true))
+
+  (test-->> baby-rust-red
+            (term (index (tup true false (index (tup true false true) 2)) 2))
+            (term true))
 
   (test-results))
 
