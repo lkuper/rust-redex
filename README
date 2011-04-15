@@ -17,12 +17,13 @@ Why bother to create a model of Rust?
     but using the model we might be able to demonstrate that it
     *won't* work as intended, avoiding an expensive mistake.
 
-  * People also sometimes say, "I didn't realize that such-and-such
-    was legal Rust code until I happened to be hacking on the parser
-    today."  One shouldn't have to look at the implementation of the
-    parser to know what the syntax of Rust is.  Right now, the
-    distinction is somewhat academic since pretty much all Rust users
-    are also Rust implementors, but (hopefully) it won't be that way
-    forever.  We don't expect users to necessarily play with the Redex
-    model, but from Redex we can get pretty pictures, grammars, and
-    such that can go in the documentation that users read.
+  * People also sometimes say, "I didn't realize that you could do
+    so-and-so in Rust until I noticed that it was implemented while I
+    was hacking on the compiler today."  One shouldn't have to look at
+    the implementation of the compiler to find out what the syntax and
+    semantics of Rust is.  Right now, the distinction is somewhat
+    academic since pretty much all Rust users are also Rust
+    implementors, but (hopefully) it won't be that way forever.  We
+    don't expect users to necessarily play with the Redex model, but
+    from the Redex model we can generate artifacts that can go in the
+    documentation that users read.
