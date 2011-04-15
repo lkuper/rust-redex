@@ -2,6 +2,28 @@
 (require redex)
 
 (define-language baby-rust
+  
+  ;; Programs
+  (Program (Item ... Main))
+  ;; A baby-rust program comprises zero or more top-level Items
+  ;; followed by a Main expression, which is just a distinguished kind
+  ;; of function.
+
+  ;; Items
+  (Item (fn Ty Var -> Ty { Expr }) Ty)
+  ;; In Rust, 'items' include modules, functions, iterators, objects,
+  ;; and types.  We're just modeling functions and types right now.  A
+  ;; better word for these might be 'definitions'.  In Rust, since
+  ;; modules can nest, items aren't entirely top-level, but they're
+  ;; top-level within a module.  But for us, since we're not modeling
+  ;; modules yet, our Items really are top-level.
+
+  ;; Main expressions
+  (Main (fn Ty Var -> Ty { Expr }))
+
+  ;; TODO: is there some special subset of functions that Main can be?
+  ;; Is its type constrained at all?
+  
   ;; Base types
   (BaseTy int bool)
   
@@ -17,8 +39,7 @@
   ;; isn't).  We're not modeling any mutability information yet.
 
   ;; Expressions
-  (Expr Lit (Op Expr Expr ...) (fn Ty Var -> Ty { Expr }) (tup Expr ...)
-        (Expr Expr) (let Ty LVal = Expr))
+  (Expr Lit (Op Expr Expr ...) (tup Expr ...) (Expr Expr) (let Ty LVal = Expr))
   (Op Unary Binary)
   ;; baby-rust expressions include literals, unary and binary
   ;; operations (which include tuple indexing operations), functions,
@@ -29,12 +50,13 @@
   ;; number.
 
   ;; LVals
-  (LVal Var (index (tup Value ...) number))
+  (LVal Var (index (tup Expr ...) Expr))
   ;; In real Rust, lvals (things on the left side of an assignment)
-  ;; can include paths (the namespacey generalization of variables),
-  ;; fields (of records and objects), indices (of vectors and tuples),
-  ;; and self-methods (self.foo).  We don't have any of those things
-  ;; in our model except for variables and tuple indices.
+  ;; can include path expressions (the namespacey generalization of
+  ;; variables), field expressions (of records and objects), index
+  ;; expressions (of vectors and tuples), and self-methods (self.foo).
+  ;; We don't have any of those things in our model except for
+  ;; variables and tuple indices.
 
   ;; Type environments
   (gamma empty (gamma Var Ty))
