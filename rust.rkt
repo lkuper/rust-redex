@@ -10,7 +10,7 @@
   ;; of function.
 
   ;; Items
-  (Item (fn Ty Var -> Ty { Expr }) Ty)
+  (Item Fn Ty)
   ;; In Rust, 'items' include modules, functions, iterators, objects,
   ;; and types.  We're just modeling functions and types right now.  A
   ;; better word for these might be 'definitions'.  In Rust, since
@@ -18,9 +18,13 @@
   ;; top-level within a module.  But for us, since we're not modeling
   ;; modules yet, our Items really are top-level.
 
-  ;; Main expressions
-  (Main (fn Ty Var -> Ty { Expr }))
+  ;; Functions
+  (Fn (fn Ty Var -> Ty { Expr }))
+  ;; This just exists so I don't have to write out (fn ... ) in as
+  ;; many places.
 
+  ;; Main expressions
+  (Main Fn)
   ;; TODO: is there some special subset of functions that Main can be?
   ;; Is its type constrained at all?
   
@@ -46,17 +50,16 @@
   ;; tuples, "call expressions" (applications), and assignments.  In
   ;; this model, functions can only take one argument.
 
-  ;; Tuple indices can be expressions, but they have to evaluate to a
-  ;; number.
-
   ;; LVals
   (LVal Var (index (tup Expr ...) Expr))
-  ;; In real Rust, lvals (things on the left side of an assignment)
-  ;; can include path expressions (the namespacey generalization of
-  ;; variables), field expressions (of records and objects), index
-  ;; expressions (of vectors and tuples), and self-methods (self.foo).
-  ;; We don't have any of those things in our model except for
-  ;; variables and tuple indices.
+  ;; In real Rust, lvals (expressions that can appear on the left side
+  ;; of an assignment) can include path expressions (the namespacey
+  ;; generalization of variables), field expressions (of records and
+  ;; objects), index expressions (of vectors and tuples), and
+  ;; self-methods (self.foo).  We don't have any of those things in
+  ;; our model except for variables and tuple indices.
+
+  ;; NB: Tuple indices have to evaluate to a number.
 
   ;; Type environments
   (gamma empty (gamma Var Ty))
@@ -64,7 +67,7 @@
   ;; variables to types.
 
   ;; Values
-  (Value Lit (fn Ty Var -> Ty { Expr }) (tup Value ...))
+  (Value Lit (tup Value ...))
 
   ;; Evaluation contexts
   (EvalCtxt hole (EvalCtxt Expr) (Value EvalCtxt) (Unary EvalCtxt)
@@ -87,6 +90,9 @@
   ;; Variables
   (Var variable-not-otherwise-mentioned)
 
+  ;; Domain of the typeck metafunction
+  (Expr/Fn Expr Fn)
+
   ;; Range of the typeck metafunction
   (Ty/illtyped Ty illtyped)
 )
@@ -95,7 +101,8 @@
   (reduction-relation
    baby-rust
 
-   ;; TODO: write subst
+   ;; TODO: This isn't right.  Before we model reduction we're going
+   ;; to have to model the heap and stack.  See: \gc?
    (---> ((fn Ty Var -> Ty { Expr }) Value)
          (subst Var Value Expr))
    (---> (op Value ...)
@@ -118,7 +125,7 @@
   )
 
 (define-metafunction baby-rust
-  typeck : gamma Expr -> Ty/illtyped
+  typeck : gamma Expr/Fn -> Ty/illtyped
 
   ;; Literals
   [(typeck gamma Lit) (typeck-Lit Lit)]
@@ -159,18 +166,18 @@
    (where (Ty_1 -> Ty_2) (typeck gamma Expr_1))
    (where Ty_1 (typeck gamma Expr_2))]
 
-  ;; Tuple types
+  ;; Tuples
   [(typeck gamma (Tup Expr ...))
    (Tup Ty ...)
    (where (Ty ...) ((typeck gamma Expr) ...))]
 
-  ;; Box types
+  ;; Boxes
   [(typeck gamma (Box Expr))
    (Box Ty)
    (where Ty (typeck gamma Expr))]
 
   ;; Fall-through
-  [(typeck gamma Expr) illtyped])
+  [(typeck gamma Expr/Fn) illtyped])
 
 (define-metafunction baby-rust
   typeck-Lit : Lit -> BaseTy
