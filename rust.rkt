@@ -21,7 +21,8 @@
   ;; Functions
   (Fn (fn Ty Var -> Ty { Expr }))
   ;; This just exists so I don't have to write out (fn ... ) in as
-  ;; many places.
+  ;; many places.  Note that in baby-rust, functions can only take one
+  ;; argument.
 
   ;; Main expressions
   (Main Fn)
@@ -43,15 +44,16 @@
   ;; isn't).  We're not modeling any mutability information yet.
 
   ;; Expressions
-  (Expr Lit (Op Expr Expr ...) (tup Expr ...) (Expr Expr) (let Ty LVal = Expr))
+  (Expr Lit (Op Expr Expr ...) (tup Expr ...) (Expr Expr)
+        (let Ty LVal = Expr))
+  
   (Op Unary Binary)
   ;; baby-rust expressions include literals, unary and binary
   ;; operations (which include tuple indexing operations), functions,
-  ;; tuples, "call expressions" (applications), and assignments.  In
-  ;; this model, functions can only take one argument.
-
+  ;; tuples, "call expressions" (applications), and assignments.
+  
   ;; LVals
-  (LVal Var (index (tup Expr ...) Expr))
+  (LVal Var Index)
   ;; In real Rust, lvals (expressions that can appear on the left side
   ;; of an assignment) can include path expressions (the namespacey
   ;; generalization of variables), field expressions (of records and
@@ -59,7 +61,9 @@
   ;; self-methods (self.foo).  We don't have any of those things in
   ;; our model except for variables and tuple indices.
 
-  ;; NB: Tuple indices have to evaluate to a number.
+  ;; TODO: Do we really want Index here, or do we just want Expr?  An
+  ;; arbitrary expression could evaluate to an Index expression,
+  ;; right?
 
   ;; Type environments
   (gamma empty (gamma Var Ty))
@@ -70,13 +74,18 @@
   (Value Lit (tup Value ...))
 
   ;; Evaluation contexts
-  (EvalCtxt hole (EvalCtxt Expr) (Value EvalCtxt) (Unary EvalCtxt)
-            (EvalCtxt Binary Expr)
-            (Value Binary EvalCtxt)
-            (tup Value ... EvalCtxt Expr ...))
+  (EvalCtxt hole
+            (EvalCtxt Expr)
+            (Value EvalCtxt)
+            (Unary EvalCtxt)
+            (Binary EvalCtxt Expr)
+            (Binary Value EvalCtxt)
+            (tup Value ... EvalCtxt Expr ...)
+            (index (tup EvalCtxt ...) Expr)
+            (index Value EvalCtxt))
 
   ;; Unary expressions
-  (Unary box deref index neg not)
+  (Unary box deref neg not)
   ;; A few of what Rust offers.  NB: Lower-case 'box' is term-level
   ;; box, rather than the type Box.
 
@@ -84,18 +93,22 @@
   (Binary + - *)
   ;; A few of what Rust offers.
 
+  ;; Tuple indexing
+  (Index (index (tup Expr ...) Expr))
+
   ;; Literals
   (Lit number false true)
 
   ;; Variables
   (Var variable-not-otherwise-mentioned)
+  ;; Any symbol not mentioned as a literal in the grammar of the
+  ;; language is fair game to be a variable.
 
   ;; Domain of the typeck metafunction
   (Expr/Fn Expr Fn)
 
   ;; Range of the typeck metafunction
-  (Ty/illtyped Ty illtyped)
-)
+  (Ty/illtyped Ty illtyped))
 
 (define baby-rust-red
   (reduction-relation
@@ -105,13 +118,21 @@
    ;; to have to model the heap and stack.  See: \gc?
    (---> ((fn Ty Var -> Ty { Expr }) Value)
          (subst Var Value Expr))
-   (---> (op Value ...)
-         (lookup-op op Value ...))
+   
+   (---> (Op Value)
+         (lookup-op Op Value))
+
+   (---> (Op Value_1 Value_2)
+         (lookup-op Op Value_1 Value_2))
+
+   (---> (index (tup Value ...) number)
+         ,(list-ref (term (Value ...)) (term number)))
+   
    with
-   [(--> (in-hole E a) (in-hole E b)) (---> a b)]))
+   [(--> (in-hole EvalCtxt a) (in-hole EvalCtxt b)) (---> a b)]))
 
 (define-metafunction baby-rust
-  lookup-op : op Value ... -> Value
+  lookup-op : Op Value ... -> Value
   [(lookup-op + number_1 number_2) ,(+ (term number_1) (term number_2))]
   [(lookup-op - number_1 number_2) ,(- (term number_1) (term number_2))]
   [(lookup-op * number_1 number_2) ,(* (term number_1) (term number_2))]
@@ -119,10 +140,7 @@
   [(lookup-op not true) false]
   [(lookup-op not false) true]
   [(lookup-op box Value) (box Value)]
-  [(lookup-op deref (box Value)) Value]
-  [(lookup-op index number (tup Value ...))
-   ,(list-ref (term (Value ...)) (term number))]
-  )
+  [(lookup-op deref (box Value)) Value])
 
 (define-metafunction baby-rust
   typeck : gamma Expr/Fn -> Ty/illtyped
@@ -171,8 +189,20 @@
    (Tup Ty ...)
    (where (Ty ...) ((typeck gamma Expr) ...))]
 
+  ;; Tuple index expressions
+  [(typeck gamma (index (tup Expr_1 ...) Expr_2))
+   Ty
+   ;; For these, we need to make sure that Expr_2 is a number, and
+   ;; that the expr in Expr_1 at that number's position has the type
+   ;; Ty.  This involves escaping to Scheme to calculate that position
+   ;; in the list.
+
+   ;; TODO: Am I doinitrite?
+   (where number (typeck gamma Expr_2))
+   (where Ty (typeck gamma ,(list-ref (term (tup Expr_1 ...)) (term Expr_2))))]
+
   ;; Boxes
-  [(typeck gamma (Box Expr))
+  [(typeck gamma (box Expr))
    (Box Ty)
    (where Ty (typeck gamma Expr))]
 
@@ -184,3 +214,26 @@
   [(typeck-Lit number) int]
   [(typeck-Lit false) bool]
   [(typeck-Lit true) bool])
+
+;; Tests
+
+(define (test-suite)
+  (test-->> baby-rust-red
+            (term 3)
+            (term 3))
+
+  (test-->> baby-rust-red
+            (term (+ 3 3))
+            (term 6))
+
+  (test-->> baby-rust-red
+            (term true)
+            (term true))
+
+  (test-->> baby-rust-red
+            (term (not true))
+            (term false))
+
+  (test-results))
+
+
