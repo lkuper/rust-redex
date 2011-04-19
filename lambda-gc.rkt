@@ -108,7 +108,8 @@
   ;; The example from the lambda-gc TR
   ;; (http://www.cs.cmu.edu/~rwh/papers/gc/tr.pdf).
   (test-->> lambda-gc-red
-            (term (letrec ((x 1)) in ((lambda (y) (proj1 y)) (pair x x))))
+            (term (letrec ((x 1)) in ((lambda (y) (proj1 y))
+                                      (pair x x))))
             (term (letrec ((x 1)
                            (Var (lambda (y) (proj1 y)))
                            (Var1 (pair x x))
@@ -118,8 +119,10 @@
   ;; This test would break if we weren't doing capture-avoiding
   ;; substitution right.
   (test-->> lambda-gc-red
-            (term (letrec () in (pair ((lambda (x) x) (proj2 (pair 1 2)))
-                                      ((lambda (x) x) (proj2 (pair 3 4))))))
+            (term (letrec () in (pair ((lambda (x) x)
+                                       (proj2 (pair 1 2)))
+                                      ((lambda (x) x)
+                                       (proj2 (pair 3 4))))))
             (term (letrec ((Var (lambda (x) x))
                            (Var1 1)
                            (Var2 2)
@@ -137,28 +140,64 @@
   ;; So would this one.
   (test-->> lambda-gc-red
             (term (letrec () in ((lambda (f)
-                                  (pair (f (pair 1 2))
-                                        (f (pair 3 4))))
+                                   (pair (f (pair 1 2))
+                                         (f (pair 3 4))))
                                  (lambda (p) (proj2 p)))))
 
-            (term (letrec ((Var (lambda (f) (pair (f (pair 1 2)) (f (pair 3 4)))))
-                            (Var1 (lambda (p) (proj2 p)))
-                            (Var2 (lambda (p) (proj2 p)))
-                            (Var3 1)
-                            (Var4 2)
-                            (Var5 (pair Var3 Var4))
-                            (Var6 (pair Var3 Var4))
-                            (Var7 3)
-                            (Var8 4)
-                            (Var9 (pair Var7 Var8))
-                            (Var10 (pair Var7 Var8))
-                            (Var11 (pair Var4 Var8)))
-                     in
-                     Var11)))
+            (term (letrec ((Var (lambda (f)
+                                  (pair (f (pair 1 2))
+                                        (f (pair 3 4)))))
+                           (Var1 (lambda (p) (proj2 p)))
+                           (Var2 (lambda (p) (proj2 p)))
+                           (Var3 1)
+                           (Var4 2)
+                           (Var5 (pair Var3 Var4))
+                           (Var6 (pair Var3 Var4))
+                           (Var7 3)
+                           (Var8 4)
+                           (Var9 (pair Var7 Var8))
+                           (Var10 (pair Var7 Var8))
+                           (Var11 (pair Var4 Var8)))
+                    in
+                    Var11)))
+
+  ;; If some variable is already in the heap with a particular name,
+  ;; we don't autogenerate that name again.
+  (test-->> lambda-gc-red
+            (term (letrec ((Var 0)
+                           (Var1 1)
+                           (Var2 2)) in (pair Var (pair Var1 Var2))))
+            (term (letrec ((Var 0)
+                           (Var1 1)
+                           (Var2 2)
+                           (Var3 (pair Var1 Var2))
+                           (Var4 (pair Var Var3)))
+                    in
+                    Var4)))
+  
+  ;; And using existing names as formal parameters isn't a problem,
+  ;; either.
+  (test-->> lambda-gc-red
+            (term (letrec ((Var 0)
+                           (Var1 1)
+                           (Var2 2)) in
+                           ((lambda (Var1) Var1)
+                            (pair
+                             Var (pair Var1 Var2)))))
+            (term (letrec ((Var 0)
+                           (Var1 1)
+                           (Var2 2)
+                           (Var3 (lambda (Var1) Var1))
+                           (Var4 (pair Var1 Var2))
+                           (Var5 (pair Var Var4))
+                           (Var6 (pair Var Var4)))
+                    in
+                    Var6)))
+  
   (test-results))
 
 
-;; Capture-avoiding substitution, borrowed from the Redex book,
+;; Capture-avoiding substitution, mostly borrowed from the Redex book,
 ;; pp. 221-223.
 (define-metafunction lambda-gc
   ;; (subst expr old-var new-expr): Read the arguments left-to-right
