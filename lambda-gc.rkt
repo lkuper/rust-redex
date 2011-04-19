@@ -94,13 +94,26 @@
                            (y (pair x x)))
                     in x)))
 
-  ;; This test shows that variable capture is a problem.  Two
-  ;; variables named x get allocated on the heap, bound to different
-  ;; values.  We either need to do alpha-conversion, or figure out how
-  ;; to transliterate capture-avoiding substitution into this setting.
+  ;; This test shows that variable capture is a problem.  (lambda (x)
+  ;; x) gets allocated on the heap twice, and two variables named x
+  ;; get allocated on the heap, bound to different values.  We either
+  ;; need to do alpha-conversion, or figure out how to transliterate
+  ;; capture-avoiding substitution into this setting.
   (test-->> lambda-gc-red
             (term (letrec () in (pair ((lambda (x) x) (proj2 (pair 1 2)))
                                       ((lambda (x) x) (proj2 (pair 3 4))))))
+            '() ;; dummy value until I figure out how to fix it
+            )
+
+  ;; And another: what if the same procedure gets applied twice?  This
+  ;; is wrong, too: (lambda (p) proj2 p) only goes onto the heap once,
+  ;; but then two pairs end up being bound to p in the heap.  So we
+  ;; again end up getting the wrong answer: '(2 2) instead of '(2 4).
+  (test-->> lambda-gc-red
+            (term (letrec () in ((lambda (f)
+                                  (pair (f (pair 1 2))
+                                        (f (pair 3 4))))
+                                 (lambda (p) (proj2 p)))))
             '() ;; dummy value until I figure out how to fix it
             )
   
