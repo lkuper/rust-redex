@@ -44,9 +44,20 @@
          (letrec Heap in (in-hole Ctxt (project proj2 Heap Var))) 
          "proj2")
    (---> (letrec Heap in (in-hole Ctxt (Var_1 Var_2)))
-         (letrec ,(append (term Heap) `((,(term Var_3) ,(term (heap-lookup Heap Var_2)))))
-           in (in-hole Ctxt Exp))
+
+         ;; The equivalent of z = H(y) from the paper: Var =
+         ;; H(Var_2).
+         (letrec ,(append (term Heap) `((,(term Var)
+                                         ,(term (heap-lookup Heap
+                                                             Var_2)))))
+
+           ;; If we took this right from the paper we'd put (in-hole
+           ;; Ctxt Exp) here.  But instead we're doing Exp but with
+           ;; free occurrences of Var_3 replaced with Var (which is
+           ;; fresh).  Then we can put Var on the heap.
+           in (in-hole Ctxt (subst Exp Var_3 Var)))
          (where (lambda (Var_3) Exp) (heap-lookup Heap Var_1))
+         (where Var ,(variable-not-in (term Heap) (term Var)))
          "app")
    with
    [(--> (in-hole Ctxt a) (in-hole Ctxt b)) (---> a b)]))
@@ -91,30 +102,81 @@
             (term (letrec ((x 1)
                            (Var (lambda (y) (proj1 y)))
                            (Var1 (pair x x))
-                           (y (pair x x)))
+                           (Var2 (pair x x)))
                     in x)))
 
-  ;; This test shows that variable capture is a problem.  (lambda (x)
-  ;; x) gets allocated on the heap twice, and two variables named x
-  ;; get allocated on the heap, bound to different values.  We either
-  ;; need to do alpha-conversion, or figure out how to transliterate
-  ;; capture-avoiding substitution into this setting.
+  ;; This test would break if we weren't doing capture-avoiding
+  ;; substitution right.
   (test-->> lambda-gc-red
             (term (letrec () in (pair ((lambda (x) x) (proj2 (pair 1 2)))
                                       ((lambda (x) x) (proj2 (pair 3 4))))))
-            '() ;; dummy value until I figure out how to fix it
-            )
+            (term (letrec ((Var (lambda (x) x))
+                           (Var1 1)
+                           (Var2 2)
+                           (Var3 (pair Var1 Var2))
+                           (Var4 2)
+                           (Var5 (lambda (x) x))
+                           (Var6 3)
+                           (Var7 4)
+                           (Var8 (pair Var6 Var7))
+                           (Var9 4)
+                           (Var10 (pair Var4 Var9)))
+                    in
+                    Var10)))
 
-  ;; And another: what if the same procedure gets applied twice?  This
-  ;; is wrong, too: (lambda (p) proj2 p) only goes onto the heap once,
-  ;; but then two pairs end up being bound to p in the heap.  So we
-  ;; again end up getting the wrong answer: '(2 2) instead of '(2 4).
+  ;; So would this one.
   (test-->> lambda-gc-red
             (term (letrec () in ((lambda (f)
                                   (pair (f (pair 1 2))
                                         (f (pair 3 4))))
                                  (lambda (p) (proj2 p)))))
-            '() ;; dummy value until I figure out how to fix it
-            )
-  
+
+            (term (letrec ((Var (lambda (f) (pair (f (pair 1 2)) (f (pair 3 4)))))
+                            (Var1 (lambda (p) (proj2 p)))
+                            (Var2 (lambda (p) (proj2 p)))
+                            (Var3 1)
+                            (Var4 2)
+                            (Var5 (pair Var3 Var4))
+                            (Var6 (pair Var3 Var4))
+                            (Var7 3)
+                            (Var8 4)
+                            (Var9 (pair Var7 Var8))
+                            (Var10 (pair Var7 Var8))
+                            (Var11 (pair Var4 Var8)))
+                     in
+                     Var11)))
   (test-results))
+
+
+;; Capture-avoiding substitution, borrowed from the Redex book,
+;; pp. 221-223.
+(define-metafunction lambda-gc
+  ;; (subst expr old-var new-expr)
+  ;; "expr, but with free occurrences of old-var replaced with
+  ;; new-expr"
+
+  ;; 1. Var_1 bound, so don't continue in lambda body
+  [(subst (lambda (Var_1) any_1) Var_1 any_2)
+   (lambda (Var_1) any_1)]
+
+  ;; 2. do capture-avoiding substitution by generating a fresh name
+  [(subst (lambda (Var_1) any_1) Var_2 any_2)
+   (lambda (Var_3)
+     (subst (subst-var any_1 Var_1 Var_3) Var_2 any_2))
+   (where Var_3 ,(variable-not-in (term (Var_2 any_1 any_2))
+                                  (term Var_1)))]
+
+  ;; 3. replace Var_1 with any_1
+  [(subst Var_1 Var_1 any_1) any_1]
+
+  ;; the last two cases just recur on the tree structure of the term
+  [(subst (any_2 ...) Var_1 any_1)
+   ((subst any_2 Var_1 any_1) ...)]
+  [(subst any_2 Var_1 any_1) any_2])
+
+(define-metafunction lambda-gc
+  [(subst-var (any_1 ...) Var_1 Var_2)
+   ((subst-var any_1 Var_1 Var_2) ...)]
+  [(subst-var Var_1 Var_1 Var_2) Var_2]
+  [(subst-var any_1 Var_1 Var_2) any_1])
+
