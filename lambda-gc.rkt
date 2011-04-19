@@ -35,28 +35,38 @@
          ;; beginning.
          (letrec ,(append (term Heap) `((,(term Var) ,(term Hval))))
            in (in-hole Ctxt Var))
+
+         ;; Make sure that Var is a fresh variable, so we don't
+         ;; conflict with bindings already in the heap.
          (where Var ,(variable-not-in (term Heap) (term Var)))
          "alloc")
+
    (---> (letrec Heap in (in-hole Ctxt (proj1 Var)))
          (letrec Heap in (in-hole Ctxt (project proj1 Heap Var))) 
          "proj1")
+
    (---> (letrec Heap in (in-hole Ctxt (proj2 Var)))
          (letrec Heap in (in-hole Ctxt (project proj2 Heap Var))) 
          "proj2")
+
    (---> (letrec Heap in (in-hole Ctxt (Var_1 Var_2)))
+         (letrec
+             ,(append (term Heap)
+                      ;; New binding on the heap: the equivalent of
+                      ;; {z = H(y)} from the paper.
+                      `((,(term Var) ,(term (heap-lookup Heap Var_2)))))
 
-         ;; The equivalent of z = H(y) from the paper: Var =
-         ;; H(Var_2).
-         (letrec ,(append (term Heap) `((,(term Var)
-                                         ,(term (heap-lookup Heap
-                                                             Var_2)))))
-
-           ;; If we took this right from the paper we'd put (in-hole
-           ;; Ctxt Exp) here.  But instead we're doing Exp but with
-           ;; free occurrences of Var_3 replaced with Var (which is
-           ;; fresh).  Then we can put Var on the heap.
+           ;; Put Exp in the evaluation context, replacing any free
+           ;; occurrences of Var_3 (the binder from the lambda
+           ;; expression on the heap) with our fresh variable Var.
            in (in-hole Ctxt (subst Exp Var_3 Var)))
+
+         ;; Var_1 should already be bound to a lambda expression in
+         ;; the heap.
          (where (lambda (Var_3) Exp) (heap-lookup Heap Var_1))
+
+         ;; Make sure that Var is a fresh variable, so we don't
+         ;; conflict with bindings already in the heap.
          (where Var ,(variable-not-in (term Heap) (term Var)))
          "app")
    with
@@ -64,7 +74,7 @@
 
 (define-metafunction lambda-gc
   project : label Heap Var -> Var
-  ;; second and third, instead of first and second, because pairs
+  ;; Use second and third, instead of first and second, because pairs
   ;; start with the tag 'pair.
   [(project proj1 Heap Var) ,(second (term (heap-lookup Heap Var)))]
   [(project proj2 Heap Var) ,(third (term (heap-lookup Heap Var)))])
@@ -151,9 +161,9 @@
 ;; Capture-avoiding substitution, borrowed from the Redex book,
 ;; pp. 221-223.
 (define-metafunction lambda-gc
-  ;; (subst expr old-var new-expr)
-  ;; "expr, but with free occurrences of old-var replaced with
-  ;; new-expr"
+  ;; (subst expr old-var new-expr): Read the arguments left-to-right
+  ;; as "expr, but with free occurrences of old-var replaced with
+  ;; new-expr".
 
   ;; 1. Var_1 bound, so don't continue in lambda body
   [(subst (lambda (Var_1) any_1) Var_1 any_2)
