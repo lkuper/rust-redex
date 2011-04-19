@@ -93,5 +93,15 @@
                            (Var1 (pair x x))
                            (y (pair x x)))
                     in x)))
+
+  ;; This test shows that variable capture is a problem.  Two
+  ;; variables named x get allocated on the heap, bound to different
+  ;; values.  We either need to do alpha-conversion, or figure out how
+  ;; to transliterate capture-avoiding substitution into this setting.
+  (test-->> lambda-gc-red
+            (term (letrec () in (pair ((lambda (x) x) (proj2 (pair 1 2)))
+                                      ((lambda (x) x) (proj2 (pair 3 4))))))
+            '() ;; dummy value until I figure out how to fix it
+            )
   
   (test-results))
