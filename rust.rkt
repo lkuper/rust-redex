@@ -3,59 +3,61 @@
 
 (define-language baby-rust
 
-  ;; TODO: Figure out how to model the heap and stack.
-  
+  ;; TODO: Figure out how to model the stack.
+  ;; TODO: Figure out how to model assignment.
+
   ;; Programs.
   (Program (Items Heap Expr))
-  ;; A baby-rust program, as the programmer writes it, comprises zero
-  ;; or more Items followed by a Main expression.  As the program
-  ;; runs, heap values (Hvals) are allocated.
-
-  ;; NB: If we do it this way then we have to sometimes look both in
-  ;; Items and in Heap for a bound variable.
-
-  (Heap ((Var Hval) ...))
-
-  ;; Results.
-  (Result (Items Heap Var))
-  ;; This is what you get when you're done running a baby-rust
-  ;; program.  Var should be bound to something in the heap.
+  ;; A baby-rust program comprises:
+  ;;
+  ;;   * A list of zero or more Items
+  ;;   * A list, initially empty, for the heap
+  ;;   * A "main" expression
+  ;;
+  ;; As the program runs, the heap grows.
 
   ;; Items.
   (Items ((Var Item) ...))
   (Item FnDefn TyDefn)
-  ;; In Rust, 'items' include modules, function definitions,
-  ;; iterators, objects, and type definitions.  We're just modeling
-  ;; function and type definitions right now.  ('Definitions' might be
-  ;; a better word than 'items' for everything in this syntactic
-  ;; category.)
+  ;; The Items list is a list of bindings from variables to Items,
+  ;; which may be function definitions or type definitions.
+  
+  ;; In real Rust, modules, objects, and iterators are also items, and
+  ;; since modules can nest, items aren't entirely top-level, just
+  ;; top-level within a module.  But in baby-rust, Items really are
+  ;; top-level.
 
-  ;; In Rust, since modules can nest, items aren't entirely top-level,
-  ;; just top-level within a module.  But in baby-rust, since we're
-  ;; not modeling modules yet, our Items really are top-level.
+  ;; Heaps.
+  (Heap ((Var Hval) ...))
+  ;; A Heap is a list of bindings from variables to Hvals.
+
+  ;; Results.
+  (Result (Items Heap Var))
+  ;; A Result is what you get when you're done running a baby-rust
+  ;; program.  It comprises:
+  ;;
+  ;;   * A list of zero or more Items
+  ;;   * A list containing everything that was allocated on the heap
+  ;;   * A variable that points into the heap at the result of the
+  ;;     program
+
+  ;; Function definitions.
+  (FnDefn (fn (type Ty -> Ty) (param Var) Expr))
+  ;; A function definition comprises an 'fn tag, a type, a formal
+  ;; parameter name, and a body. Note that in baby-rust, functions can
+  ;; only take one argument.
 
   ;; Type definitions.
   (TyDefn (type Ty))
 
-  ;; Function definitions.
-  (FnDefn (fn (type Ty -> Ty) (param Var) Expr))
-  ;; A function definition, comprising a type, a formal parameter
-  ;; name, and a body. Note that in baby-rust, functions can only take
-  ;; one argument.
-
   ;; Base types.
   (BaseTy int bool)
-  
+
   ;; Types.
   (Ty BaseTy (Ty -> Ty) (Tup Ty ...) (Box Ty))
-  ;; baby-rust types include base types, function types, tuple types,
-  ;; and box types.
-
-  ;; In Rust, box types and tuple types carry mutability annotations
-  ;; (mutable, immutable, or maybe mutable).  In tuple types, each
-  ;; element contains its own mutability annotation (as opposed to
-  ;; Rust vectors, in which either the entire vector is mutable or it
-  ;; isn't).  We're not modeling any mutability information yet.
+  ;; Types in baby-rust include base types, function types, tuple
+  ;; types, and box types.  We're not modeling any mutability
+  ;; information for box and tuple types yet.
 
   ;; Expressions.
   (Expr Lit
@@ -63,7 +65,7 @@
         (Expr Binary Expr)
         (tup Expr ...)
         (Expr Expr)
-        (let Ty LVal = Expr)
+        (let Ty Lval = Expr)
         Var
         Index)
   ;; baby-rust expressions include literals, unary and binary
@@ -71,10 +73,9 @@
   ;; assignments, "path expressions" (variables), and index
   ;; expressions.
 
-  ;; Unops and binops.
+  ;; Built-in operators.
   (Op Unary Binary)
-  ;; Convenient for defining lookup-op.
-  
+
   ;; Lvals.
   (Lval Var Index)
   ;; In real Rust, lvals (expressions that can appear on the left side
@@ -87,12 +88,7 @@
   ;; TODO: Do we really just want Expr here?  An arbitrary expression
   ;; could evaluate to an Index expression, right?
 
-  ;; Type environments
-  (gamma empty (gamma Var Ty))
-  ;; A type environment is a mapping, possibly empty, of bindings from
-  ;; variables to types.
-
-  ;; Evaluation contexts
+  ;; Evaluation contexts.
   (EvalCtxt hole
             (EvalCtxt Expr)
             (Var EvalCtxt)
@@ -105,10 +101,9 @@
             (index EvalCtxt Expr)
             (index Var EvalCtxt))
 
-  ;; Heap values
+  ;; Heap values.
   (Hval Lit (tup Var ...) (box Var))
 
-  ;; Instructions.
   (Instr Hval
          (Var Var)
          (Unary Var)
@@ -121,29 +116,32 @@
   ;; have to allocate something in the heap, look something up in the
   ;; heap, or maybe both.
 
-  ;; Unary expressions
+  ;; Unary operators.
   (Unary neg not)
-  ;; A few of what Rust offers.
 
-  ;; Binary expressions
+  ;; Binary operators.
   (Binary + - *)
-  ;; A few of what Rust offers.
 
-  ;; Tuple indexing
+  ;; Tuple indexing expressions.
   (Index (index (tup Expr ...) Expr))
 
-  ;; Literals
+  ;; Literals.
   (Lit number false true)
 
-  ;; Variables
-  (Var variable-not-otherwise-mentioned)
   ;; Any symbol not mentioned as a literal in the grammar of the
   ;; language is fair game to be a variable.
+  (Var variable-not-otherwise-mentioned)
 
-  ;; Domain of the typeck metafunction
+  ;;; Stuff for typechecking
+
+  ;; A type environment is a mapping, possibly empty, of bindings from
+  ;; variables to types.
+  (gamma empty (gamma Var Ty))
+
+  ;; Domain of the typeck metafunction.
   (Expr/FnDefn Expr FnDefn)
 
-  ;; Range of the typeck metafunction
+  ;; Range of the typeck metafunction.
   (Ty/illtyped Ty illtyped))
 
 (define baby-rust-red
@@ -318,6 +316,7 @@
   [(subst-var Var_1 Var_1 Var_2) Var_2]
   [(subst-var any_1 Var_1 Var_2) any_1])
 
+;; Typechecking.  TODO: Make this work!
 (define-metafunction baby-rust
   typeck : gamma Expr/FnDefn -> Ty/illtyped
 
