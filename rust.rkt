@@ -186,7 +186,7 @@
 
          ;; Var_1 should already be the name of some function in
          ;; Items.
-         (where (Var_1 (fn (type Ty_1 -> Ty_2) (param Var_3) Expr))
+         (where (fn (type Ty_1 -> Ty_2) (param Var_3) Expr)
                 (item-lookup Items Var_1))
 
          ;; Make sure that Var is really a fresh name, so we don't
@@ -235,7 +235,7 @@
 
 (define-metafunction baby-rust
   item-lookup : Items Var -> Item
-  [(item-lookup Items Var) (assq (term Var) (term Items))])
+  [(item-lookup Items Var) ,(second (assq (term Var) (term Items)))])
 
 ;; Don't know if we'll need these next two...
 
@@ -284,6 +284,39 @@
    ;; cdr because tuples begin with the tag 'tup.
    ,(list-ref (cdr (term (heap-lookup Heap Var_1)))
               (term (heap-lookup Heap Var_2)))])
+
+
+;; Capture-avoiding substitution, mostly borrowed from the Redex book,
+;; pp. 221-223.
+(define-metafunction baby-rust
+  ;; (subst expr old-var new-expr): Read the arguments left-to-right
+  ;; as "expr, but with free occurrences of old-var replaced with
+  ;; new-expr".
+
+  ;; 1. Var_1 bound, so don't continue in lambda body
+  [(subst (lambda (Var_1) any_1) Var_1 any_2)
+   (lambda (Var_1) any_1)]
+
+  ;; 2. do capture-avoiding substitution by generating a fresh name
+  [(subst (lambda (Var_1) any_1) Var_2 any_2)
+   (lambda (Var_3)
+     (subst (subst-var any_1 Var_1 Var_3) Var_2 any_2))
+   (where Var_3 ,(variable-not-in (term (Var_2 any_1 any_2))
+                                  (term Var_1)))]
+
+  ;; 3. replace Var_1 with any_1
+  [(subst Var_1 Var_1 any_1) any_1]
+
+  ;; the last two cases just recur on the tree structure of the term
+  [(subst (any_2 ...) Var_1 any_1)
+   ((subst any_2 Var_1 any_1) ...)]
+  [(subst any_2 Var_1 any_1) any_2])
+
+(define-metafunction baby-rust
+  [(subst-var (any_1 ...) Var_1 Var_2)
+   ((subst-var any_1 Var_1 Var_2) ...)]
+  [(subst-var Var_1 Var_1 Var_2) Var_2]
+  [(subst-var any_1 Var_1 Var_2) any_1])
 
 (define-metafunction baby-rust
   typeck : gamma Expr/FnDefn -> Ty/illtyped
@@ -549,17 +582,76 @@
   (test-results))
 
 (define (program-test-suite)
-  
+
   (test-->> baby-rust-red
-            (term (((x (type int))
-                    (f (fn (type int -> int) (param x) (x + 1))))
+            (term (((f (fn (type int -> int) (param x) (x + 1))))
                    ()
                    (f 3)))
-            (term (((x (type int))
-                    (f (fn (type int -> int) (param x) (x + 1))))
-                   () ;; some bindings in here
-                   Var5)) ;; or something
-)
+            (term
+             (((f (fn (type int -> int)
+                      (param x)
+                      (x + 1))))
+              ((Var 3)
+               (Var1 3)
+               (Var2 1)
+               (Var3 4))
+              Var3)))
+
+  ;; Names of formal parameters don't matter.
+  (test-->> baby-rust-red
+            (term (((f (fn (type int -> int)
+                           (param Var)
+                           (Var + 1))))
+                   ()
+                   (f 3)))
+            (term
+             (((f (fn (type int -> int)
+                      (param Var)
+                      (Var + 1))))
+              ((Var 3)
+               (Var1 3)
+               (Var2 1)
+               (Var3 4))
+              Var3)))
+  
+  (test-->> baby-rust-red
+            (term (((f (fn (type int -> int)
+                           (param Var2)
+                           (Var2 + 1))))
+                   ()
+                   (f 3)))
+            (term
+             (((f (fn (type int -> int)
+                      (param Var2)
+                      (Var2 + 1))))
+              ((Var 3)
+               (Var1 3)
+               (Var2 1)
+               (Var3 4))
+              Var3)))
+
+  (test-->> baby-rust-red
+            (term (((f (fn (type int -> int)
+                           (param x)
+                           (square (square x))))
+                    (square (fn (type int -> int)
+                                (param x)
+                                (x * x))))
+                   ()
+                   (f 3)))
+            (term (((f (fn (type int -> int)
+                           (param x)
+                           (square (square x))))
+                    (square (fn (type int -> int)
+                                (param x)
+                                (x * x))))
+                   ((Var 3)
+                    (Var1 3)
+                    (Var2 3)
+                    (Var3 9)
+                    (Var4 9)
+                    (Var5 81))
+                   Var5)))
 
   (test-results))
 
