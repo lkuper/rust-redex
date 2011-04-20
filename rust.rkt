@@ -5,13 +5,25 @@
 
   ;; TODO: Figure out how to model the heap and stack.
   
-  ;; Programs
-  (Program (Item ... Main))
-  ;; A baby-rust program comprises zero or more Items followed by a
-  ;; Main expression.
+  ;; Programs.
+  (Program (Items Heap Expr))
+  ;; A baby-rust program, as the programmer writes it, comprises zero
+  ;; or more Items followed by a Main expression.  As the program
+  ;; runs, heap values (Hvals) are allocated.
 
-  ;; Items
-  (Item Fn TyDefn)
+  ;; NB: If we do it this way then we have to sometimes look both in
+  ;; Items and in Heap for a bound variable.
+
+  (Heap ((Var Hval) ...))
+
+  ;; Results.
+  (Result (Items Heap Var))
+  ;; This is what you get when you're done running a baby-rust
+  ;; program.  Var should be bound to something in the heap.
+
+  ;; Items.
+  (Items ((Var Item) ...))
+  (Item FnDefn TyDefn)
   ;; In Rust, 'items' include modules, function definitions,
   ;; iterators, objects, and type definitions.  We're just modeling
   ;; function and type definitions right now.  ('Definitions' might be
@@ -22,22 +34,19 @@
   ;; just top-level within a module.  But in baby-rust, since we're
   ;; not modeling modules yet, our Items really are top-level.
 
-  ;; Type declarations
-  (TyDefn (type Var = Ty))
+  ;; Type definitions.
+  (TyDefn (type Ty))
 
-  ;; Functions
-  (Fn (fn Var = Ty Var -> Ty { Expr }))
-  ;; This just exists so I don't have to write out (fn ... ) in as
-  ;; many places.  Note that in baby-rust, functions can only take one
-  ;; argument.
+  ;; Function definitions.
+  (FnDefn (fn (type Ty -> Ty) (param Var) Expr))
+  ;; A function definition, comprising a type, a formal parameter
+  ;; name, and a body. Note that in baby-rust, functions can only take
+  ;; one argument.
 
-  ;; Main expressions
-  (Main (main Expr))
-  
-  ;; Base types
+  ;; Base types.
   (BaseTy int bool)
   
-  ;; Types
+  ;; Types.
   (Ty BaseTy (Ty -> Ty) (Tup Ty ...) (Box Ty))
   ;; baby-rust types include base types, function types, tuple types,
   ;; and box types.
@@ -48,7 +57,7 @@
   ;; Rust vectors, in which either the entire vector is mutable or it
   ;; isn't).  We're not modeling any mutability information yet.
 
-  ;; Expressions
+  ;; Expressions.
   (Expr Lit
         (Unary Expr)
         (Expr Binary Expr)
@@ -57,18 +66,17 @@
         (let Ty LVal = Expr)
         Var
         Index)
-  
   ;; baby-rust expressions include literals, unary and binary
   ;; operations, tuples, "call expressions" (applications),
   ;; assignments, "path expressions" (variables), and index
   ;; expressions.
 
-  ;; Unops and binops
+  ;; Unops and binops.
   (Op Unary Binary)
   ;; Convenient for defining lookup-op.
   
-  ;; LVals
-  (LVal Var Index)
+  ;; Lvals.
+  (Lval Var Index)
   ;; In real Rust, lvals (expressions that can appear on the left side
   ;; of an assignment) can include path expressions (the namespacey
   ;; generalization of variables), field expressions (of records and
@@ -90,15 +98,33 @@
   ;; Evaluation contexts
   (EvalCtxt hole
             (EvalCtxt Expr)
-            (Value EvalCtxt)
+            (Var EvalCtxt)
             (Unary EvalCtxt)
             (EvalCtxt Binary Expr)
-            (Value Binary EvalCtxt)
-            (tup Value ... EvalCtxt Expr ...)
+            (Var Binary EvalCtxt)
+            (tup Var ... EvalCtxt Expr ...)
             (deref EvalCtxt)
             (box EvalCtxt)
-            (index (tup Value ... EvalCtxt Expr ...) Expr)
-            (index Value EvalCtxt))
+            (index (tup Var ... EvalCtxt Expr ...) Expr)
+            (index Var EvalCtxt))
+
+  ;; Heap values
+  (Hval Value)
+
+  ;; Instructions.
+  (Instr Hval
+         (Var Var)
+         (Unary Var)
+         (Var Binary Var)
+         (tup Var ...)
+         (deref Var)
+         (box Var)
+         (index Var Var))
+  ;; An Instr is something that we have to define the ---> reduction
+  ;; relation on.  Expressions have to keep being evaluated using the
+  ;; standard --> reduction semantics, but Instrs mean that we either
+  ;; have to allocate something in the heap, look something up in the
+  ;; heap, or maybe both.
 
   ;; Unary expressions
   (Unary neg not)
@@ -120,7 +146,7 @@
   ;; language is fair game to be a variable.
 
   ;; Domain of the typeck metafunction
-  (Expr/Fn Expr Fn)
+  (Expr/FnDefn Expr FnDefn)
 
   ;; Range of the typeck metafunction
   (Ty/illtyped Ty illtyped))
@@ -129,37 +155,124 @@
   (reduction-relation
    baby-rust
 
-   ;; TODO: This isn't right.  Before we model reduction we're going
-   ;; to have to model the heap and stack.  See: \gc?
-   (---> ((fn Var_1 Ty Var_2 -> Ty { Expr }) Value)
-         (subst Var Value Expr))
+   ;; Program -> Program/Result
+
+   ;; Allocate Hvals on the heap.
+   (---> (Items Heap
+                (in-hole EvalCtxt
+                         Hval))
+         (Items ,(append (term Heap) `((,(term Var) ,(term Hval))))
+                (in-hole EvalCtxt
+                         Var))
+         ;; Make sure that Var is a fresh variable, so we don't
+         ;; conflict with bindings already in the heap.
+         (where Var ,(variable-not-in (term Heap) (term Var)))
+         "Alloc")
+
+   ;; If we get to a (Var_1 Var_2) function application, then Var_1 is
+   ;; going to point to some function in Items, and Var_2 is going to
+   ;; point to some hval in the heap.  (Var_2 can't point to an Item
+   ;; -- they're not first-class -- and Var_1 can't point to an hval
+   ;; because they can't be functions.)
+   (---> (Items Heap
+                (in-hole EvalCtxt
+                         (Var_1 Var_2)))
+         (Items ,(append (term Heap)
+                         ;; Put a new binding on the heap
+                         `((,(term Var) ,(term (heap-lookup Heap Var_2)))))
+
+                ;; Expr is the body of the function Var_1 points to
+                ;; (henceforth "f").  We put Expr in the evaluation
+                ;; context, replacing any free occurrences of Var_3
+                ;; (which is f's formal parameter) with the fresh name
+                ;; Var.
+                (in-hole EvalCtxt
+                         (subst Expr Var_3 Var)))
+
+         ;; Var_1 should already be the name of some function in
+         ;; Items.
+         (where (Var_1 (fn (type Ty_1 -> Ty_2) (param Var_3) Expr))
+                (item-lookup Items Var_1))
+
+         ;; Make sure that Var is really a fresh name, so we don't
+         ;; conflict with bindings already in the heap.
+         (where Var ,(variable-not-in (term Heap) (term Var)))
+         "App")
    
-   (---> (Op Value)
-         (lookup-op Op Value))
+   (---> (Items Heap
+          (in-hole EvalCtxt
+                   (Op Var)))
+         (Items Heap
+          (in-hole EvalCtxt
+                   (lookup-op Op Heap Var)))
+         "UnaryOp")
 
-   (---> (Value_1 Op Value_2)
-         (lookup-op Op Value_1 Value_2))
+   (---> (Items Heap
+          (in-hole EvalCtxt
+                   (Var_1 Op Var_2)))
+         (Items Heap
+          (in-hole EvalCtxt
+                   (lookup-op Op Heap Var_1 Var_2)))
+         "BinaryOp")
 
-   (---> (index (tup Value ...) number)
-         ,(list-ref (term (Value ...)) (term number)))
+   (---> (Items Heap
+          (in-hole EvalCtxt
+                   (index (tup Var ...) number)))
+         (Items Heap
+          (in-hole EvalCtxt
+                   ,(list-ref (term (Var ...)) (term number))))
+         "Index")
 
-   (---> (deref (box Value))
-         Value)
+   (---> (Items Heap
+          (in-hole EvalCtxt
+                   (deref (box Var)))) 
+         (Items Heap
+          (in-hole EvalCtxt
+                   Var))
+         "Deref")
    
    with
    [(--> (in-hole EvalCtxt a) (in-hole EvalCtxt b)) (---> a b)]))
 
 (define-metafunction baby-rust
-  lookup-op : Op Value ... -> Value
-  [(lookup-op + number_1 number_2) ,(+ (term number_1) (term number_2))]
-  [(lookup-op - number_1 number_2) ,(- (term number_1) (term number_2))]
-  [(lookup-op * number_1 number_2) ,(* (term number_1) (term number_2))]
-  [(lookup-op neg number) ,(- (term number))]
-  [(lookup-op not true) false]
-  [(lookup-op not false) true])
+  heap-lookup : Heap Var -> Hval
+  [(heap-lookup Heap Var) ,(second (assq (term Var) (term Heap)))])
 
 (define-metafunction baby-rust
-  typeck : gamma Expr/Fn -> Ty/illtyped
+  item-lookup : Items Var -> Item
+  [(item-lookup Items Var) (assq (term Var) (term Items))])
+
+;; Don't know if we'll need these next two...
+
+(define-metafunction baby-rust
+  fnbody-lookup : Items Var -> Expr
+  [(fnbody-lookup Items Var)
+   ;; Pull Quux out of a binding that looks like
+   ;; (Var (fn (type Foo -> Bar) (param Baz) Quux))
+   (fourth (second (assq (term Var) (term Items))))])
+
+(define-metafunction baby-rust
+  fnparam-lookup : Items Var -> Var
+  [(fnparam-lookup Items Var)
+   ;; Pull Baz out of a binding that looks like
+   ;; (Var (fn (type Foo -> Bar) (param Baz) Quux))
+   (second (third (second (assq (term Var) (term Items)))))])
+
+(define-metafunction baby-rust
+  lookup-op : Op Heap Var ... -> Value
+  [(lookup-op + Heap Var_1 Var_2) ,(+ (term (heap-lookup Heap Var_1))
+                                      (term (heap-lookup Heap Var_2)))]
+  [(lookup-op - Heap Var_1 Var_2) ,(- (term (heap-lookup Heap Var_1))
+                                      (term (heap-lookup Heap Var_2)))]
+  [(lookup-op * Heap Var_1 Var_2) ,(* (term (heap-lookup Heap Var_1))
+                                      (term (heap-lookup Heap Var_2)))]
+  [(lookup-op neg Heap Var) ,(- (term (heap-lookup Heap Var)))]
+
+  ;; FIXME.
+  [(lookup-op not Heap Var) ,(not (term (heap-lookup Heap Var)))])
+
+(define-metafunction baby-rust
+  typeck : gamma Expr/FnDefn -> Ty/illtyped
 
   ;; Literals
   [(typeck gamma Lit) (typeck-Lit Lit)]
@@ -190,7 +303,7 @@
    (typeck gamma x)]
 
   ;; Functions
-  [(typeck gamma (fn Ty_1 Var -> Ty_2 { Expr }))
+  [(typeck gamma (fn (type Ty_1 -> Ty_2) (param Var) Expr))
    (Ty_1 -> Ty_2)
    (where Ty_2 (typeck (gamma Var Ty_1) Expr))]
 
@@ -223,7 +336,7 @@
    (where Ty (typeck gamma Expr))]
 
   ;; Fall-through
-  [(typeck gamma Expr/Fn) illtyped])
+  [(typeck gamma Expr/FnDefn) illtyped])
 
 (define-metafunction baby-rust
   typeck-Lit : Lit -> BaseTy
@@ -233,30 +346,59 @@
 
 ;; Tests
 
+;; Wraps a term in the extra stuff (Heap and Items) to make an entire
+;; Program.
+(define (create-program t)
+  (term (()
+         ()
+         ,t)))
+
 (define (expr-test-suite)
   (test-->> baby-rust-red
-            (term 3)
-            (term 3))
+            (create-program (term 3))
+            (term (()
+                   ((Var 3))
+                   Var)))
 
   (test-->> baby-rust-red
-            (term (3 + 3))
-            (term 6))
+            (create-program (term (3 + 3)))
+            (term (()
+                   ((Var 3)
+                    (Var1 3)
+                    (Var2 6))
+                   Var2)))
 
   (test-->> baby-rust-red
-            (term (3 + (2 + 1)))
-            (term 6))
+            (create-program (term (3 + (2 + 1))))
+            (term (()
+                   ((Var 3)
+                    (Var1 2)
+                    (Var2 1)
+                    (Var3 3)
+                    (Var4 6))
+                   Var4)))
 
   (test-->> baby-rust-red
-            (term ((3 + 2) + 1))
-            (term 6))
+            (create-program (term ((3 + 2) + 1)))
+            (term (()
+                   ((Var 3)
+                    (Var1 2)
+                    (Var2 5)
+                    (Var3 1)
+                    (Var4 6))
+                   Var4)))
 
   (test-->> baby-rust-red
-            (term true)
-            (term true))
+            (create-program (term true))
+            (term (()
+                   ((Var true))
+                   Var)))
 
   (test-->> baby-rust-red
-            (term (not true))
-            (term false))
+            (create-program (term (not true)))
+            (term (()
+                   ((Var false))
+                   Var)))
 
   (test-->> baby-rust-red
             (term (deref (box 3)))
@@ -303,11 +445,15 @@
 (define (program-test-suite)
   
   (test-->> baby-rust-red
-            ;; TODO: Implement how to evaluate this!
-            (term ((fn f = int x -> int { (x + 1) })
-                   (type x = int)
-                   (main (f 3))))
-            (term 4))
+            (term (((x (type int))
+                    (f (fn (type int -> int) (param x) (x + 1))))
+                   ()
+                   (f 3)))
+            (term (((x (type int))
+                    (f (fn (type int -> int) (param x) (x + 1))))
+                   () ;; some bindings in here
+                   Var5)) ;; or something
+)
 
   (test-results))
 
