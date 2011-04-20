@@ -102,7 +102,7 @@
             (tup Var ... EvalCtxt Expr ...)
             (deref EvalCtxt)
             (box EvalCtxt)
-            (index (tup Var ... EvalCtxt Expr ...) Expr)
+            (index EvalCtxt Expr)
             (index Var EvalCtxt))
 
   ;; Heap values
@@ -113,9 +113,7 @@
          (Var Var)
          (Unary Var)
          (Var Binary Var)
-         (tup Var ...)
          (deref Var)
-         (box Var)
          (index Var Var))
   ;; An Instr is something that we have to define the ---> reduction
   ;; relation on.  Expressions have to keep being evaluated using the
@@ -198,36 +196,36 @@
    
    (---> (Items Heap
           (in-hole EvalCtxt
-                   (Op Var)))
+                   (Unary Var)))
          (Items Heap
           (in-hole EvalCtxt
-                   (lookup-op Op Heap Var)))
+                   (lookup-op Unary Heap Var)))
          "UnaryOp")
 
    (---> (Items Heap
           (in-hole EvalCtxt
-                   (Var_1 Op Var_2)))
+                   (Var_1 Binary Var_2)))
          (Items Heap
           (in-hole EvalCtxt
-                   (lookup-op Op Heap Var_1 Var_2)))
+                   (lookup-op Binary Heap Var_1 Var_2)))
          "BinaryOp")
 
    (---> (Items Heap
           (in-hole EvalCtxt
-                   (index (tup Var ...) number)))
+                   (deref Var))) 
          (Items Heap
           (in-hole EvalCtxt
-                   ,(list-ref (term (Var ...)) (term number))))
-         "Index")
+                   (lookup-deref Heap Var)))
+         "Deref")
 
    (---> (Items Heap
           (in-hole EvalCtxt
-                   (deref (box Var)))) 
+                   (index Var_1 Var_2)))
          (Items Heap
           (in-hole EvalCtxt
-                   Var))
-         "Deref")
-   
+                   (lookup-index Heap Var_1 Var_2)))
+         "Index")
+
    with
    [(--> (in-hole EvalCtxt a) (in-hole EvalCtxt b)) (---> a b)]))
 
@@ -257,18 +255,35 @@
 
 (define-metafunction baby-rust
   lookup-op : Op Heap Var ... -> Hval
-  [(lookup-op + Heap Var_1 Var_2) ,(+ (term (heap-lookup Heap Var_1))
-                                      (term (heap-lookup Heap Var_2)))]
-  [(lookup-op - Heap Var_1 Var_2) ,(- (term (heap-lookup Heap Var_1))
-                                      (term (heap-lookup Heap Var_2)))]
-  [(lookup-op * Heap Var_1 Var_2) ,(* (term (heap-lookup Heap Var_1))
-                                      (term (heap-lookup Heap Var_2)))]
-  [(lookup-op neg Heap Var) ,(- (term (heap-lookup Heap Var)))]
+  [(lookup-op + Heap Var_1 Var_2)
+   ,(+ (term (heap-lookup Heap Var_1))
+       (term (heap-lookup Heap Var_2)))]
+  [(lookup-op - Heap Var_1 Var_2)
+   ,(- (term (heap-lookup Heap Var_1))
+       (term (heap-lookup Heap Var_2)))]
+  [(lookup-op * Heap Var_1 Var_2)
+   ,(* (term (heap-lookup Heap Var_1))
+       (term (heap-lookup Heap Var_2)))]
+  [(lookup-op neg Heap Var)
+   ,(- (term (heap-lookup Heap Var)))]
+  [(lookup-op not Heap Var)
+   ,(let ((b (term (heap-lookup Heap Var))))
+      (cond
+        [(equal? b (term true)) (term false)]
+        [(equal? b (term false)) (term true)]))])
 
-  [(lookup-op not Heap Var) ,(let ((b (term (heap-lookup Heap Var))))
-                               (cond
-                                 [(equal? b (term true)) (term false)]
-                                 [(equal? b (term false)) (term true)]))])
+(define-metafunction baby-rust
+  lookup-deref : Heap Var -> Var
+  [(lookup-deref Heap Var)
+   ;; second because boxes begin with the tag 'box.
+   ,(second (term (heap-lookup Heap Var)))])
+
+(define-metafunction baby-rust
+  lookup-index : Heap Var Var -> Var
+  [(lookup-index Heap Var_1 Var_2)
+   ;; cdr because tuples begin with the tag 'tup.
+   ,(list-ref (cdr (term (heap-lookup Heap Var_1)))
+              (term (heap-lookup Heap Var_2)))])
 
 (define-metafunction baby-rust
   typeck : gamma Expr/FnDefn -> Ty/illtyped
@@ -393,28 +408,46 @@
 
   (test-->> baby-rust-red
             (create-program (term true))
-            (term (()
-                   ((Var true))
-                   Var)))
+            (term
+             (()
+              ((Var true))
+              Var)))
 
   (test-->> baby-rust-red
             (create-program (term (not true)))
-            (term (()
-                   ((Var true)
-                    (Var1 false))
-                   Var1)))
+            (term
+             (()
+              ((Var true)
+               (Var1 false))
+              Var1)))
 
   (test-->> baby-rust-red
             (create-program (term (deref (box 3))))
-            (term 3))
+            (term
+             (()
+              ((Var 3)
+               (Var1 (box Var)))
+              Var)))
 
   (test-->> baby-rust-red
             (create-program (term (deref (box (3 + 3)))))
-            (term 6))
+            (term
+             (()
+              ((Var 3)
+               (Var1 3)
+               (Var2 6)
+               (Var3 (box Var2)))
+              Var2)))
 
   (test-->> baby-rust-red
             (create-program (term (deref (box (not (not false))))))
-            (term false))
+            (term
+             (()
+              ((Var false)
+               (Var1 true)
+               (Var2 false)
+               (Var3 (box Var2)))
+              Var2)))
 
   (test-->> baby-rust-red
             (create-program (term (tup 1 2 3)))
@@ -446,7 +479,9 @@
                (Var1 2)
                (Var2 3)
                (Var3 3)
-               (Var4 6))
+               (Var4 6)
+               (Var5 (tup Var Var1 Var4))
+               (Var6 0))
               Var)))
 
   (test-->> baby-rust-red
@@ -457,7 +492,9 @@
                (Var1 2)
                (Var2 3)
                (Var3 3)
-               (Var4 6))
+               (Var4 6)
+               (Var5 (tup Var Var1 Var4))
+               (Var6 2))
               Var4)))
 
   (test-->> baby-rust-red
@@ -470,8 +507,10 @@
                (Var2 true)
                (Var3 false)
                (Var4 true)
-               (Var5 (tup Var Var1 Var4)))
-              Var5)))
+               (Var5 (tup Var2 Var3 Var4))
+               (Var6 2)
+               (Var7 (tup Var Var1 Var4)))
+              Var7)))
 
   (test-->> baby-rust-red
             (create-program
@@ -483,7 +522,11 @@
                (Var1 false)
                (Var2 true)
                (Var3 false)
-               (Var4 true))
+               (Var4 true)
+               (Var5 (tup Var2 Var3 Var4))
+               (Var6 2)
+               (Var7 (tup Var Var1 Var4))
+               (Var8 0))
               Var)))
 
   (test-->> baby-rust-red
@@ -496,7 +539,11 @@
                (Var1 false)
                (Var2 true)
                (Var3 false)
-               (Var4 true))
+               (Var4 true)
+               (Var5 (tup Var2 Var3 Var4))
+               (Var6 2)
+               (Var7 (tup Var Var1 Var4))
+               (Var8 2))
               Var4)))
 
   (test-results))
@@ -504,11 +551,10 @@
 (define (program-test-suite)
   
   (test-->> baby-rust-red
-            (create-program
-             (term (((x (type int))
+            (term (((x (type int))
                     (f (fn (type int -> int) (param x) (x + 1))))
                    ()
-                   (f 3))))
+                   (f 3)))
             (term (((x (type int))
                     (f (fn (type int -> int) (param x) (x + 1))))
                    () ;; some bindings in here
