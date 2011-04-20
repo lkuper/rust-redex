@@ -92,9 +92,6 @@
   ;; A type environment is a mapping, possibly empty, of bindings from
   ;; variables to types.
 
-  ;; Values
-  (Value Lit (tup Value ...) (box Value))
-
   ;; Evaluation contexts
   (EvalCtxt hole
             (EvalCtxt Expr)
@@ -109,7 +106,7 @@
             (index Var EvalCtxt))
 
   ;; Heap values
-  (Hval Value)
+  (Hval Lit (tup Var ...) (box Var))
 
   ;; Instructions.
   (Instr Hval
@@ -259,7 +256,7 @@
    (second (third (second (assq (term Var) (term Items)))))])
 
 (define-metafunction baby-rust
-  lookup-op : Op Heap Var ... -> Value
+  lookup-op : Op Heap Var ... -> Hval
   [(lookup-op + Heap Var_1 Var_2) ,(+ (term (heap-lookup Heap Var_1))
                                       (term (heap-lookup Heap Var_2)))]
   [(lookup-op - Heap Var_1 Var_2) ,(- (term (heap-lookup Heap Var_1))
@@ -268,8 +265,10 @@
                                       (term (heap-lookup Heap Var_2)))]
   [(lookup-op neg Heap Var) ,(- (term (heap-lookup Heap Var)))]
 
-  ;; FIXME.
-  [(lookup-op not Heap Var) ,(not (term (heap-lookup Heap Var)))])
+  [(lookup-op not Heap Var) ,(let ((b (term (heap-lookup Heap Var))))
+                               (cond
+                                 [(equal? b (term true)) (term false)]
+                                 [(equal? b (term false)) (term true)]))])
 
 (define-metafunction baby-rust
   typeck : gamma Expr/FnDefn -> Ty/illtyped
@@ -356,37 +355,41 @@
 (define (expr-test-suite)
   (test-->> baby-rust-red
             (create-program (term 3))
-            (term (()
-                   ((Var 3))
-                   Var)))
+            (term
+             (()
+              ((Var 3))
+              Var)))
 
   (test-->> baby-rust-red
             (create-program (term (3 + 3)))
-            (term (()
-                   ((Var 3)
-                    (Var1 3)
-                    (Var2 6))
-                   Var2)))
+            (term
+             (()
+              ((Var 3)
+               (Var1 3)
+               (Var2 6))
+              Var2)))
 
   (test-->> baby-rust-red
             (create-program (term (3 + (2 + 1))))
-            (term (()
-                   ((Var 3)
-                    (Var1 2)
-                    (Var2 1)
-                    (Var3 3)
-                    (Var4 6))
-                   Var4)))
+            (term
+             (()
+              ((Var 3)
+               (Var1 2)
+               (Var2 1)
+               (Var3 3)
+               (Var4 6))
+              Var4)))
 
   (test-->> baby-rust-red
             (create-program (term ((3 + 2) + 1)))
-            (term (()
-                   ((Var 3)
-                    (Var1 2)
-                    (Var2 5)
-                    (Var3 1)
-                    (Var4 6))
-                   Var4)))
+            (term
+             (()
+              ((Var 3)
+               (Var1 2)
+               (Var2 5)
+               (Var3 1)
+               (Var4 6))
+              Var4)))
 
   (test-->> baby-rust-red
             (create-program (term true))
@@ -397,58 +400,115 @@
   (test-->> baby-rust-red
             (create-program (term (not true)))
             (term (()
-                   ((Var false))
-                   Var)))
+                   ((Var true)
+                    (Var1 false))
+                   Var1)))
 
   (test-->> baby-rust-red
-            (term (deref (box 3)))
+            (create-program (term (deref (box 3))))
             (term 3))
 
   (test-->> baby-rust-red
-            (term (deref (box (3 + 3))))
+            (create-program (term (deref (box (3 + 3)))))
             (term 6))
 
   (test-->> baby-rust-red
-            (term (deref (box (not (not false)))))
+            (create-program (term (deref (box (not (not false))))))
             (term false))
 
   (test-->> baby-rust-red
-            (term (tup 1 2 3))
-            (term (tup 1 2 3)))
+            (create-program (term (tup 1 2 3)))
+            (term
+             (()
+              ((Var 1)
+               (Var1 2)
+               (Var2 3)
+               (Var3 (tup Var Var1 Var2)))
+              Var3)))
 
   (test-->> baby-rust-red
-            (term (tup 1 2 (3 + 3)))
-            (term (tup 1 2 6)))
+            (create-program (term (tup 1 2 (3 + 3))))
+            (term
+             (()
+              ((Var 1)
+               (Var1 2)
+               (Var2 3)
+               (Var3 3)
+               (Var4 6)
+               (Var5 (tup Var Var1 Var4)))
+              Var5)))
 
   (test-->> baby-rust-red
-            (term (index (tup 1 2 (3 + 3)) 0))
-            (term 1))
+            (create-program (term (index (tup 1 2 (3 + 3)) 0)))
+            (term
+             (()
+              ((Var 1)
+               (Var1 2)
+               (Var2 3)
+               (Var3 3)
+               (Var4 6))
+              Var)))
 
   (test-->> baby-rust-red
-            (term (index (tup 1 2 (3 + 3)) 2))
-            (term 6))
+            (create-program (term (index (tup 1 2 (3 + 3)) 2)))
+            (term
+             (()
+              ((Var 1)
+               (Var1 2)
+               (Var2 3)
+               (Var3 3)
+               (Var4 6))
+              Var4)))
 
   (test-->> baby-rust-red
-            (term (tup true false (index (tup true false true) 2)))
-            (term (tup true false true)))
+            (create-program
+             (term (tup true false (index (tup true false true) 2))))
+            (term
+             (()
+              ((Var true)
+               (Var1 false)
+               (Var2 true)
+               (Var3 false)
+               (Var4 true)
+               (Var5 (tup Var Var1 Var4)))
+              Var5)))
 
   (test-->> baby-rust-red
-            (term (index (tup true false (index (tup true false true) 2)) 0))
-            (term true))
+            (create-program
+             (term (index (tup true false
+                               (index (tup true false true) 2)) 0)))
+            (term
+             (()
+              ((Var true)
+               (Var1 false)
+               (Var2 true)
+               (Var3 false)
+               (Var4 true))
+              Var)))
 
   (test-->> baby-rust-red
-            (term (index (tup true false (index (tup true false true) 2)) 2))
-            (term true))
+            (create-program
+             (term (index (tup true false
+                               (index (tup true false true) 2)) 2)))
+            (term
+             (()
+              ((Var true)
+               (Var1 false)
+               (Var2 true)
+               (Var3 false)
+               (Var4 true))
+              Var4)))
 
   (test-results))
 
 (define (program-test-suite)
   
   (test-->> baby-rust-red
-            (term (((x (type int))
+            (create-program
+             (term (((x (type int))
                     (f (fn (type int -> int) (param x) (x + 1))))
                    ()
-                   (f 3)))
+                   (f 3))))
             (term (((x (type int))
                     (f (fn (type int -> int) (param x) (x + 1))))
                    () ;; some bindings in here
