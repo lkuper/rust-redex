@@ -54,16 +54,18 @@
   (BaseTy int bool)
 
   ;; Types.
-  (Ty BaseTy (Ty -> Ty) (Tup Ty ...) (Box Ty))
+  (Ty BaseTy (Ty Ty ... -> Ty) (Tup Ty ...) (Box Ty))
   ;; Types in baby-rust include base types, function types, tuple
-  ;; types, and box types.  We're not modeling any mutability
-  ;; information for box and tuple types yet.
+  ;; types, and box types.  Multiple types to the left of the arrow
+  ;; have to be OK because built-ins like + have that type.  We're not
+  ;; modeling any mutability information for box and tuple types yet.
 
   ;; Expressions.
   (Expr Lit
         (Unary Expr)
         (Expr Binary Expr)
         (tup Expr ...)
+        (box Expr)
         (Expr Expr)
         (let Ty Lval = Expr)
         Var
@@ -136,7 +138,7 @@
 
   ;; A type environment is a mapping, possibly empty, of bindings from
   ;; variables to types.
-  (gamma empty (gamma Var Ty))
+  (gamma ((Var Ty) ...))
 
   ;; Domain of the typeck metafunction.
   (Expr/FnDefn Expr FnDefn)
@@ -318,21 +320,21 @@
   [(typeck gamma (Expr_1 Binary Expr_2))
    Ty
    ;; Binary operator typechecks as Ty_1 Ty_2 -> Ty
-   (where (Ty_1 -> Ty) (typeck-Binary Binary ))
+   (where (Ty_1 Ty_2 -> Ty) (typeck-Binary Binary))
    ;; Operands typecheck
    (where Ty_1 (typeck gamma Expr_1))
    (where Ty_2 (typeck gamma Expr_2))]
 
   ;; Variables
-  [(typeck (gamma x Ty) x)
+  [(typeck (gamma (x Ty)) x)
    Ty]
-  [(typeck (gamma y Ty) x)
+  [(typeck (gamma (y Ty)) x)
    (typeck gamma x)]
 
   ;; Functions
   [(typeck gamma (fn (type Ty_1 -> Ty_2) (param Var) Expr))
    (Ty_1 -> Ty_2)
-   (where Ty_2 (typeck (gamma Var Ty_1) Expr))]
+   (where Ty_2 (typeck (gamma (Var Ty_1)) Expr))]
 
   ;; Call expressions
   [(typeck gamma (Expr_1 Expr_2))
@@ -371,7 +373,70 @@
   [(typeck-Lit false) bool]
   [(typeck-Lit true) bool])
 
+(define-metafunction baby-rust
+  typeck-Unary : Unary -> Ty
+  [(typeck-Unary neg) (int -> int)]
+  [(typeck-Unary not) (bool -> bool)])
+
+(define-metafunction baby-rust
+  typeck-Binary : Binary -> Ty
+  [(typeck-Binary +) (int int -> int)]
+  [(typeck-Binary -) (int int -> int)]
+  [(typeck-Binary *) (int int -> int)])
+
 ;; Tests
+
+(define (typeck-test-suite)
+
+  (test-equal
+   (term (typeck () 3))
+   (term int))
+
+  (test-equal
+   (term (typeck () (3 + 3)))
+   (term int))
+
+  (test-equal
+   (term (typeck () (3 - 3)))
+   (term int))
+
+  (test-equal
+   (term (typeck () (3 - 5)))
+   (term int))
+
+  (test-equal
+   (term (typeck () ((neg 3) - 5)))
+   (term int))
+
+  (test-equal
+   (term (typeck () (3 * 5)))
+   (term int))
+
+  (test-equal
+   (term (typeck () ((neg 3) * (3 + 3))))
+   (term int))
+
+  (test-equal
+   (term (typeck () false))
+   (term bool))
+
+  (test-equal
+   (term (typeck () true))
+   (term bool))
+
+  (test-equal
+   (term (typeck () (not (not (not false)))))
+   (term bool))
+
+  (test-equal
+   (term (typeck () (box 3)))
+   (term (Box int)))
+
+  (test-equal
+   (term (typeck () (box (not (not (not false))))))
+   (term (Box bool)))
+
+  (test-results))
 
 ;; Wraps a term in the extra stuff (Heap and Items) to make an entire
 ;; Program.
