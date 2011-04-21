@@ -283,38 +283,19 @@
    ,(list-ref (cdr (term (heap-lookup Heap Var_1)))
               (term (heap-lookup Heap Var_2)))])
 
-
-;; Capture-avoiding substitution, mostly borrowed from the Redex book,
-;; pp. 221-223.
+;; This is just dumb substitution -- it doesn't have to be
+;; capture-avoiding substitution.
 (define-metafunction baby-rust
   ;; (subst expr old-var new-expr): Read the arguments left-to-right
-  ;; as "expr, but with free occurrences of old-var replaced with
+  ;; as "expr, but with occurrences of old-var replaced with
   ;; new-expr".
 
-  ;; 1. Var_1 bound, so don't continue in lambda body
-  [(subst (lambda (Var_1) any_1) Var_1 any_2)
-   (lambda (Var_1) any_1)]
-
-  ;; 2. do capture-avoiding substitution by generating a fresh name
-  [(subst (lambda (Var_1) any_1) Var_2 any_2)
-   (lambda (Var_3)
-     (subst (subst-var any_1 Var_1 Var_3) Var_2 any_2))
-   (where Var_3 ,(variable-not-in (term (Var_2 any_1 any_2))
-                                  (term Var_1)))]
-
-  ;; 3. replace Var_1 with any_1
   [(subst Var_1 Var_1 any_1) any_1]
 
-  ;; the last two cases just recur on the tree structure of the term
   [(subst (any_2 ...) Var_1 any_1)
    ((subst any_2 Var_1 any_1) ...)]
-  [(subst any_2 Var_1 any_1) any_2])
 
-(define-metafunction baby-rust
-  [(subst-var (any_1 ...) Var_1 Var_2)
-   ((subst-var any_1 Var_1 Var_2) ...)]
-  [(subst-var Var_1 Var_1 Var_2) Var_2]
-  [(subst-var any_1 Var_1 Var_2) any_1])
+  [(subst any_2 Var_1 any_1) any_2])
 
 ;; Typechecking.  TODO: Make this work!
 (define-metafunction baby-rust
