@@ -278,7 +278,8 @@
   
   (test-results))
 
-;; This is just dumb textual substitution.  Capture-avoiding substitution isn't necessary, since 
+;; This is just dumb textual substitution.  Capture-avoiding
+;; substitution isn't necessary.
 (define-metafunction lambda-gc
   ;; (subst expr old-var new-expr): Read the arguments left-to-right
   ;; as "expr, but with occurrences of old-var replaced with
