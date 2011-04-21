@@ -19,10 +19,8 @@
   ;; Evaluation contexts and instruction expressions.
   (Ctxt hole (pair Ctxt Exp) (pair Var Ctxt) (proj1 Ctxt) (proj2 Ctxt)
         (Ctxt Exp) (Var Ctxt))
-  (Instr Hval (proj1 Var) (proj2 Var) (Var Var))
-
-  ;; This is just so we can define the domain of 'project'.
-  (label proj1 proj2))
+  (Instr Hval (Proj Var) (Var Var))
+  (Proj proj1 proj2))
 
 (define lambda-gc-red
   (reduction-relation
@@ -41,13 +39,9 @@
          (where Var ,(variable-not-in (term Heap) (term Var)))
          "alloc")
 
-   (---> (letrec Heap in (in-hole Ctxt (proj1 Var)))
-         (letrec Heap in (in-hole Ctxt (project proj1 Heap Var))) 
-         "proj1")
-
-   (---> (letrec Heap in (in-hole Ctxt (proj2 Var)))
-         (letrec Heap in (in-hole Ctxt (project proj2 Heap Var))) 
-         "proj2")
+   (---> (letrec Heap in (in-hole Ctxt (Proj Var)))
+         (letrec Heap in (in-hole Ctxt (project Proj Heap Var))) 
+         "proj")
 
    (---> (letrec Heap in (in-hole Ctxt (Var_1 Var_2)))
          (letrec
@@ -73,7 +67,7 @@
    [(--> (in-hole Ctxt a) (in-hole Ctxt b)) (---> a b)]))
 
 (define-metafunction lambda-gc
-  project : label Heap Var -> Var
+  project : Proj Heap Var -> Var
   ;; Use second and third, instead of first and second, because pairs
   ;; start with the tag 'pair.
   [(project proj1 Heap Var) ,(second (term (heap-lookup Heap Var)))]
