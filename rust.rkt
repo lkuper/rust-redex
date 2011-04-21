@@ -85,8 +85,8 @@
   ;; self-methods (self.foo).  We don't have any of those things in
   ;; our model except for variables and tuple indices.
 
-  ;; TODO: Do we really just want Expr here?  An arbitrary expression
-  ;; could evaluate to an Index expression, right?
+  ;; TODO: Do we really want to be this limiting?  An arbitrary (Expr
+  ;; Expr) could evaluate to an Index or Var expression, right?
 
   ;; Evaluation contexts.
   (EvalCtxt hole
