@@ -136,6 +136,9 @@
                     in
                     Var10)))
 
+  ;; Naive substitution works -- here 'Var4' replaces 'x' in (lambda
+  ;; (x) x), but it isn't a problem because the formal parameter 'x'
+  ;; gets replaced with 'Var4' too!
   (test-->> lambda-gc-red
             (term (letrec () in (pair ((lambda (x)
                                          ((lambda (x) x) 3))
@@ -169,6 +172,10 @@
                     in
                     Var13)))
 
+  ;; And if 'Var4' appears literally in the term, it's not a problem
+  ;; because the variable-not-in feature in the app rule doesn't allow
+  ;; us to pick any variable that already appears anywhere in the heap
+  ;; at all.
   (test-->> lambda-gc-red
             (term (letrec () in (pair ((lambda (x)
                                          ((lambda (x)
