@@ -299,7 +299,7 @@
 
   [(subst any_2 Var_1 any_1) any_2])
 
-;; Typechecking.  TODO: Make this work!
+;; Typechecking.
 (define-metafunction baby-rust
   typeck : gamma Expr/FnDefn -> Ty/illtyped
 
@@ -387,6 +387,7 @@
 ;; Tests
 
 (define (typeck-test-suite)
+  ;; TODO: This is just a start -- we should test fancier types.
 
   (test-equal
    (term (typeck () 3))
