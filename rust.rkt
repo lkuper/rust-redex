@@ -337,15 +337,17 @@
    (where Ty_2 (typeck TyEnv Expr_2))]
 
   ;; Variables
-  [(typeck (TyEnv (x Ty)) x)
-   Ty]
-  [(typeck (TyEnv (y Ty)) x)
-   (typeck TyEnv x)]
+  [(typeck ((Var_1 Ty_1) (Var Ty) ...) Var_1)
+   Ty_1]
+  [(typeck ((Var_1 Ty_1) (Var Ty) ...) Var_2)
+   (typeck ((Var Ty) ...) Var_2)]
 
   ;; Functions
   [(typeck TyEnv (fn (type Ty_1 -> Ty_2) (param Var) Expr))
    (Ty_1 -> Ty_2)
-   (where Ty_2 (typeck (TyEnv (Var Ty_1)) Expr))]
+   ;; Function body needs to have the correct type in an extended type
+   ;; environment
+   (where Ty_2 (typeck ,(cons (term (Var Ty_1)) (term TyEnv)) Expr))]
 
   ;; Call expressions
   [(typeck TyEnv (Expr_1 Expr_2))

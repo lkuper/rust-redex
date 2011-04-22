@@ -3,8 +3,6 @@
          "rust.rkt")
 
 (define (typeck-test-suite)
-  ;; TODO: This is just a start -- we should test fancier types.
-
   (test-equal
    (term (typeck () 3))
    (term int))
@@ -123,6 +121,38 @@
   (test-equal
    (term (typeck () (tup (deref (box (deref (box false)))))))
    (term (Tup bool)))
+
+  (test-equal
+   (term (typeck ((x int)) (x + 1)))
+   (term int))
+
+  (test-equal
+   (term (typeck () (x + 1)))
+   (term illtyped))
+
+  (test-equal
+   (term (typeck ((x int) (y bool)) (x + 1)))
+   (term int))
+
+  (test-equal
+   (term (typeck ((x int) (y bool)) (y + 1)))
+   (term illtyped))
+
+  (test-equal
+   (term (typeck () (fn (type int -> int) (param x) (x + 1))))
+   (term (int -> int)))
+
+  (test-equal
+   (term (typeck () (fn (type int -> int) (param x) (x + false))))
+   (term illtyped))
+
+  (test-equal
+   (term (typeck () (fn (type bool -> bool) (param b) (not (not (not b))))))
+   (term (bool -> bool)))
+
+  (test-equal
+   (term (typeck () (fn (type int -> (Tup int bool)) (param n) (tup n true))))
+   (term (int -> (Tup int bool))))
 
   (test-results))
 
