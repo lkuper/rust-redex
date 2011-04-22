@@ -273,6 +273,18 @@
                       (term (recursive-lookup Heap ,v)))
                     (cdr result)))]))])
 
+(define (make-value t)
+  ;; make-value : term -> term
+  ;; Wraps t in a dummy program, evaluates it, takes the first (only)
+  ;; Result from reduction, and converts it to a Value.  Useful for
+  ;; testing and for partial evaluation during typechecking.
+  (term (result-value
+          ,(first
+            (apply-reduction-relation*
+             baby-rust-red
+             (create-program
+              t))))))
+
 ;; Don't know if we'll need these next two...
 
 (define-metafunction baby-rust
@@ -399,11 +411,7 @@
    ;; dependent types haha woo
    (where Ty ,(begin
                (list-ref (cdr (term Ty_1))
-                         (term (result-value
-                                ,(first (apply-reduction-relation*
-                                         baby-rust-red
-                                         (create-program
-                                          (term Expr_2)))))))))]
+                         (make-value (term Expr_2)))))]
 
   ;; Deref expressions
   [(typeck gamma (deref Expr))
@@ -543,6 +551,22 @@
    (term (typeck () (index (tup (box true) (box 1))
                            (index (tup 0 1 2) (deref (box 0))))))
    (term (Box bool)))
+
+  (test-equal
+   (term (typeck () (deref (box 0))))
+   (term int))
+
+  (test-equal
+   (term (typeck () (deref (deref (box (box 0))))))
+   (term int))
+
+  (test-equal
+   (term (typeck () (deref (box (deref (box 0))))))
+   (term int))
+
+  (test-equal
+   (term (typeck () (tup (deref (box (deref (box false)))))))
+   (term (Tup bool)))
 
   (test-results))
 
@@ -849,6 +873,10 @@
                     (Var4 9)
                     (Var5 81))
                    Var5)))
+
+  (test-equal
+   (make-value (term (tup (deref (box (deref (box (3 + 3))))))))
+   (term (tup 6)))
 
   (test-results))
 
