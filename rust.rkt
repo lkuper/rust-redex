@@ -65,6 +65,7 @@
         (Unary Expr)
         (Expr Binary Expr)
         (tup Expr ...)
+        (deref Expr)
         (box Expr)
         (Expr Expr)
         (let Ty Lval = Expr)
@@ -92,19 +93,22 @@
 
   ;; Evaluation contexts.
   (EvalCtxt hole
-            (EvalCtxt Expr)
-            (Var EvalCtxt)
             (Unary EvalCtxt)
             (EvalCtxt Binary Expr)
             (Var Binary EvalCtxt)
             (tup Var ... EvalCtxt Expr ...)
             (deref EvalCtxt)
             (box EvalCtxt)
+            (EvalCtxt Expr)
+            (Var EvalCtxt)
             (index EvalCtxt Expr)
             (index Var EvalCtxt))
 
   ;; Heap values.
   (Hval Lit (tup Var ...) (box Var))
+
+  ;; Only for check-result.
+  (Val Lit (tup Val ...) (box Val))
 
   (Instr Hval
          (Var Var)
@@ -237,6 +241,38 @@
   item-lookup : Items Var -> Item
   [(item-lookup Items Var) ,(second (assq (term Var) (term Items)))])
 
+
+;; It's annoying to have to look at a Result and figure out whether
+;; the thing you actually wanted was computed.  That's what
+;; result-value is for: it takes a Result and returns a Val, such as 3
+;; or (tup true false true) or (box (box 15)).
+(define-metafunction baby-rust
+  result-value : Result -> Val
+  [(result-value (Items Heap Var))
+   (recursive-lookup Heap Var)])
+
+(define-metafunction baby-rust
+  recursive-lookup : Heap Var -> Val
+  [(recursive-lookup Heap Var)
+   ,(let ((result (term (heap-lookup Heap Var))))
+      (cond
+        ;; The result of a heap-lookup is going to be an Hval.
+        [(redex-match baby-rust Lit (term ,result))
+         ;; It's a Lit.
+         result]
+        [(redex-match baby-rust (box Var_1) (term ,result))
+         ;; It's a box.
+         (term (box (recursive-lookup Heap ,(second (term ,result)))))]
+        [(redex-match baby-rust (tup Var_1 ...) (term ,result))
+         ;; It's a tuple.
+
+         ;; Augh, wish I could figure out a way to do this with
+         ;; ellipses...
+         (cons 'tup
+               (map (lambda (v)
+                      (term (recursive-lookup Heap ,v)))
+                    (cdr result)))]))])
+
 ;; Don't know if we'll need these next two...
 
 (define-metafunction baby-rust
@@ -343,7 +379,7 @@
    (where Ty_1 (typeck gamma Expr_2))]
 
   ;; Tuples
-  [(typeck gamma (Tup Expr ...))
+  [(typeck gamma (tup Expr ...))
    (Tup Ty ...)
    (where (Ty ...) ((typeck gamma Expr) ...))]
 
@@ -355,9 +391,25 @@
    ;; Ty.  This involves escaping to Scheme to calculate that position
    ;; in the list.
 
-   ;; TODO: Am I doinitrite?
-   (where number (typeck gamma Expr_2))
-   (where Ty (typeck gamma ,(list-ref (term (tup Expr_1 ...)) (term Expr_2))))]
+   ;; Index has to be an int
+   (where int (typeck gamma Expr_2))
+   ;; Whole tuple has to typecheck
+   (where Ty_1 (typeck gamma (tup Expr_1 ...)))
+
+   ;; dependent types haha woo
+   (where Ty ,(begin
+               (list-ref (cdr (term Ty_1))
+                         (term (result-value
+                                ,(first (apply-reduction-relation*
+                                         baby-rust-red
+                                         (create-program
+                                          (term Expr_2)))))))))]
+
+  ;; Deref expressions
+  [(typeck gamma (deref Expr))
+   ;; The thing we're dereffing had better be a box
+   Ty
+   (where (Box Ty) (typeck gamma Expr))]
 
   ;; Boxes
   [(typeck gamma (box Expr))
@@ -437,6 +489,61 @@
    (term (typeck () (box (not (not (not false))))))
    (term (Box bool)))
 
+  (test-equal
+   (term (typeck () (tup 1)))
+   (term (Tup int)))
+
+  (test-equal
+   (term (typeck () (tup 1 2 3)))
+   (term (Tup int int int)))
+
+  (test-equal
+   (term (typeck () (tup 1 false (3 + 3))))
+   (term (Tup int bool int)))
+
+  (test-equal
+   (term (typeck () (tup (tup 1 2 (box 3)) true)))
+   (term (Tup (Tup int int (Box int)) bool)))
+
+  (test-equal
+   (term (typeck () (tup (tup 1 2 (box 3)) true (4 * (5 + 3))
+                         (not false) (neg 6))))
+   (term (Tup (Tup int int (Box int)) bool int bool int)))
+
+  (test-equal
+   (term (typeck () (tup (neg (neg (neg (neg (5 + (3 - 7)))))))))
+   (term (Tup int)))
+
+  (test-equal
+   (term (typeck () (index (tup 2) 0)))
+   (term int))
+
+  (test-equal
+   (term (typeck () (index (tup 2) (1 - 1))))
+   (term int))
+
+  (test-equal
+   (term (typeck () (index (tup 2 3 4) (1 - 1))))
+   (term int))
+
+  (test-equal
+   (term (typeck () (index (tup 2 3 4 5) (1 + (1 + 1)))))
+   (term int))
+
+  (test-equal
+   (term (typeck () (index (tup 2 3 4 false) (1 + (1 + 1)))))
+   (term bool))
+
+  (test-equal
+   (term (typeck () (index (tup true false true false)
+                           (index (tup 0 1 2) 2))))
+   (term bool))
+
+  (test-equal
+   (term (typeck () (index (tup (box true) (box 1))
+                           (index (tup 0 1 2) (deref (box 0))))))
+   (term (Box bool)))
+
   (test-results))
 
 ;; Wraps a term in the extra stuff (Heap and Items) to make an entire
@@ -445,6 +552,50 @@
   (term (()
          ()
          ,t)))
+
+
+(define (meta-test-suite)
+  (test-equal
+   (term (result-value (()
+                        ((Var 3))
+                        Var)))
+   (term 3))
+
+  (test-equal
+   (term (result-value (()
+                         ((Var 3)
+                          (Var1 3)
+                          (Var2 6))
+                         Var2)))
+   (term 6))
+
+  (test-equal
+   (term (result-value (()
+                        ((Var true)
+                         (Var1 false)
+                         (Var2 true)
+                         (Var3 false)
+                         (Var4 true)
+                         (Var5 (tup Var2 Var3 Var4))
+                         (Var6 2)
+                         (Var7 (tup Var Var1 Var4)))
+                        Var7)))
+   (term (tup true false true)))
+
+  (test-equal
+   (term (result-value (()
+                        ((Var 3)
+                         (Var1 4)
+                         (Var2 true)
+                         (Var3 false)
+                         (Var4 (box Var))
+                         (Var5 (box Var4))
+                         (Var6 (tup Var2 Var3))
+                         (Var7 (tup Var1 Var4 Var5 Var6)))
+                        Var7)))
+   (term (tup 4 (box 3) (box (box 3)) (tup true false))))
+
+  (test-results))
 
 (define (expr-test-suite)
   (test-->> baby-rust-red
@@ -701,4 +852,9 @@
 
   (test-results))
 
+(define (test-all)
+  (typeck-test-suite)
+  (meta-test-suite)
+  (expr-test-suite)
+  (program-test-suite))
 
