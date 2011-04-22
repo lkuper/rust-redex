@@ -149,7 +149,7 @@
 
   ;; A type environment is a mapping, possibly empty, of bindings from
   ;; variables to types.
-  (gamma ((Var Ty) ...))
+  (TyEnv ((Var Ty) ...))
 
   ;; Domain of the typeck metafunction.
   (Expr/FnDefn Expr FnDefn)
@@ -248,50 +248,6 @@
   item-lookup : Items Var -> Item
   [(item-lookup Items Var) ,(second (assq (term Var) (term Items)))])
 
-
-;; It's annoying to have to look at a Result and figure out whether
-;; the thing you actually wanted was computed.  That's what
-;; result-value is for: it takes a Result and returns a Val, such as 3
-;; or (tup true false true) or (box (box 15)).
-(define-metafunction baby-rust
-  result-value : Result -> Val
-  [(result-value (Items Heap Var))
-   (recursive-lookup Heap Var)])
-
-(define-metafunction baby-rust
-  recursive-lookup : Heap Var -> Val
-  [(recursive-lookup Heap Var)
-   ,(let ((result (term (heap-lookup Heap Var))))
-      (cond
-        ;; The result of a heap-lookup is going to be an Hval.
-        [(redex-match baby-rust Lit (term ,result))
-         ;; It's a Lit.
-         result]
-        [(redex-match baby-rust (box Var_1) (term ,result))
-         ;; It's a box.
-         (term (box (recursive-lookup Heap ,(second (term ,result)))))]
-        [(redex-match baby-rust (tup Var_1 ...) (term ,result))
-         ;; It's a tuple.
-
-         ;; Augh, wish I could figure out a way to do this with
-         ;; ellipses...
-         (cons 'tup
-               (map (lambda (v)
-                      (term (recursive-lookup Heap ,v)))
-                    (cdr result)))]))])
-
-(define (make-value t)
-  ;; make-value : term -> term
-  ;; Wraps t in a dummy program, evaluates it, takes the first (only)
-  ;; Result from reduction, and converts it to a Value.  Useful for
-  ;; testing and for partial evaluation during typechecking.
-  (term (result-value
-          ,(first
-            (apply-reduction-relation*
-             baby-rust-red
-             (create-program
-              t))))))
-
 ;; Don't know if we'll need these next two...
 
 (define-metafunction baby-rust
@@ -356,54 +312,54 @@
 
 ;; Typechecking.
 (define-metafunction baby-rust
-  typeck : gamma Expr/FnDefn -> Ty/illtyped
+  typeck : TyEnv Expr/FnDefn -> Ty/illtyped
 
   ;; Literals
-  [(typeck gamma Lit) (typeck-Lit Lit)]
+  [(typeck TyEnv Lit) (typeck-Lit Lit)]
 
   ;; TODO: Maybe generalize unary and binary expressions into one case.
 
   ;; Unary expressions
-  [(typeck gamma (Unary Expr))
+  [(typeck TyEnv (Unary Expr))
    Ty
    ;; Unary operator typechecks as Ty_1 -> Ty
    (where (Ty_1 -> Ty) (typeck-Unary Unary))
    ;; Operand typechecks
-   (where Ty_1 (typeck gamma Expr))]
+   (where Ty_1 (typeck TyEnv Expr))]
 
   ;; Binary expressions
-  [(typeck gamma (Expr_1 Binary Expr_2))
+  [(typeck TyEnv (Expr_1 Binary Expr_2))
    Ty
    ;; Binary operator typechecks as Ty_1 Ty_2 -> Ty
    (where (Ty_1 Ty_2 -> Ty) (typeck-Binary Binary))
    ;; Operands typecheck
-   (where Ty_1 (typeck gamma Expr_1))
-   (where Ty_2 (typeck gamma Expr_2))]
+   (where Ty_1 (typeck TyEnv Expr_1))
+   (where Ty_2 (typeck TyEnv Expr_2))]
 
   ;; Variables
-  [(typeck (gamma (x Ty)) x)
+  [(typeck (TyEnv (x Ty)) x)
    Ty]
-  [(typeck (gamma (y Ty)) x)
-   (typeck gamma x)]
+  [(typeck (TyEnv (y Ty)) x)
+   (typeck TyEnv x)]
 
   ;; Functions
-  [(typeck gamma (fn (type Ty_1 -> Ty_2) (param Var) Expr))
+  [(typeck TyEnv (fn (type Ty_1 -> Ty_2) (param Var) Expr))
    (Ty_1 -> Ty_2)
-   (where Ty_2 (typeck (gamma (Var Ty_1)) Expr))]
+   (where Ty_2 (typeck (TyEnv (Var Ty_1)) Expr))]
 
   ;; Call expressions
-  [(typeck gamma (Expr_1 Expr_2))
+  [(typeck TyEnv (Expr_1 Expr_2))
    Ty_2
-   (where (Ty_1 -> Ty_2) (typeck gamma Expr_1))
-   (where Ty_1 (typeck gamma Expr_2))]
+   (where (Ty_1 -> Ty_2) (typeck TyEnv Expr_1))
+   (where Ty_1 (typeck TyEnv Expr_2))]
 
   ;; Tuples
-  [(typeck gamma (tup Expr ...))
+  [(typeck TyEnv (tup Expr ...))
    (Tup Ty ...)
-   (where (Ty ...) ((typeck gamma Expr) ...))]
+   (where (Ty ...) ((typeck TyEnv Expr) ...))]
 
   ;; Tuple index expressions
-  [(typeck gamma (index (tup Expr_1 ...) Expr_2))
+  [(typeck TyEnv (index (tup Expr_1 ...) Expr_2))
    Ty
    ;; For these, we need to make sure that Expr_2 is a number, and
    ;; that the expr in Expr_1 at that number's position has the type
@@ -411,9 +367,9 @@
    ;; in the list.
 
    ;; Index has to be an int
-   (where int (typeck gamma Expr_2))
+   (where int (typeck TyEnv Expr_2))
    ;; Whole tuple has to typecheck
-   (where Ty_1 (typeck gamma (tup Expr_1 ...)))
+   (where Ty_1 (typeck TyEnv (tup Expr_1 ...)))
 
    ;; dependent types haha woo
    (where Ty ,(begin
@@ -421,18 +377,18 @@
                          (make-value (term Expr_2)))))]
 
   ;; Deref expressions
-  [(typeck gamma (deref Expr))
-   ;; The thing we're dereffing had better be a box
+  [(typeck TyEnv (deref Expr))
+   ;; The thing we're dereferencing had better be a box
    Ty
-   (where (Box Ty) (typeck gamma Expr))]
+   (where (Box Ty) (typeck TyEnv Expr))]
 
   ;; Boxes
-  [(typeck gamma (box Expr))
+  [(typeck TyEnv (box Expr))
    (Box Ty)
-   (where Ty (typeck gamma Expr))]
+   (where Ty (typeck TyEnv Expr))]
 
   ;; Fall-through
-  [(typeck gamma Expr/FnDefn) illtyped])
+  [(typeck TyEnv Expr/FnDefn) illtyped])
 
 (define-metafunction baby-rust
   typeck-Lit : Lit -> BaseTy
@@ -451,6 +407,37 @@
   [(typeck-Binary -) (int int -> int)]
   [(typeck-Binary *) (int int -> int)])
 
+;; It's annoying to have to look at a Result and figure out whether
+;; the thing you actually wanted was computed.  That's what
+;; result-value is for: it takes a Result and returns a Val, such as 3
+;; or (tup true false true) or (box (box 15)).
+(define-metafunction baby-rust
+  result-value : Result -> Val
+  [(result-value (Items Heap Var))
+   (recursive-lookup Heap Var)])
+
+(define-metafunction baby-rust
+  recursive-lookup : Heap Var -> Val
+  [(recursive-lookup Heap Var)
+   ,(let ((result (term (heap-lookup Heap Var))))
+      (cond
+        ;; The result of a heap-lookup is going to be an Hval.
+        [(redex-match baby-rust Lit (term ,result))
+         ;; It's a Lit.
+         result]
+        [(redex-match baby-rust (box Var_1) (term ,result))
+         ;; It's a box.
+         (term (box (recursive-lookup Heap ,(second (term ,result)))))]
+        [(redex-match baby-rust (tup Var_1 ...) (term ,result))
+         ;; It's a tuple.
+
+         ;; Augh, wish I could figure out a way to do this with
+         ;; ellipses...
+         (cons 'tup
+               (map (lambda (v)
+                      (term (recursive-lookup Heap ,v)))
+                    (cdr result)))]))])
+
 ;; Wraps a term in the extra stuff (Heap and Items) to make an entire
 ;; Program.
 (define (create-program t)
@@ -458,3 +445,14 @@
          ()
          ,t)))
 
+(define (make-value t)
+  ;; make-value : term -> term
+  ;; Wraps t in a dummy program, evaluates it, takes the first (only)
+  ;; Result from reduction, and converts it to a Value.  Useful for
+  ;; testing and for partial evaluation during typechecking.
+  (term (result-value
+          ,(first
+            (apply-reduction-relation*
+             baby-rust-red
+             (create-program
+              t))))))
