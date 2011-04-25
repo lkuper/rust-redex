@@ -363,9 +363,9 @@
   ;; Tuple index expressions
   [(typeck TyEnv (index (tup Expr_1 ...) Expr_2))
    Ty
-   ;; For these, we need to make sure that Expr_2 is a number, and
+   ;; For these, we need to make sure that Expr_2 has type int and
    ;; that the expr in Expr_1 at that number's position has the type
-   ;; Ty.  This involves escaping to Scheme to calculate that position
+   ;; Ty.  This involves escaping to Racket to calculate that position
    ;; in the list.
 
    ;; Index has to be an int
@@ -373,10 +373,11 @@
    ;; Whole tuple has to typecheck
    (where Ty_1 (typeck TyEnv (tup Expr_1 ...)))
 
-   ;; dependent types haha woo
-   (where Ty ,(begin
-               (list-ref (cdr (term Ty_1))
-                         (make-value (term Expr_2)))))]
+   ;; Evaluate Expr_2 and pull the correct item out of the list.
+   ;; (Caveat: Expr_2 better be a closed expression, because we're
+   ;; evaluating it with an empty heap and an empty Items list.)
+   (where Ty ,(list-ref (cdr (term Ty_1))
+                        (make-value (term Expr_2))))]
 
   ;; Deref expressions
   [(typeck TyEnv (deref Expr))
@@ -449,9 +450,9 @@
 
 (define (make-value t)
   ;; make-value : term -> term
-  ;; Wraps t in a dummy program, evaluates it, takes the first (only)
-  ;; Result from reduction, and converts it to a Value.  Useful for
-  ;; testing and for partial evaluation during typechecking.
+  ;; Wraps t in a dummy program, reduces it, takes the first (only, I
+  ;; hope) Result from reduction, and converts it to a Value.  Useful
+  ;; for testing and for partial evaluation during typechecking.
   (term (result-value
           ,(first
             (apply-reduction-relation*
