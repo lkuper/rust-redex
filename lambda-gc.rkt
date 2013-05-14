@@ -26,7 +26,7 @@
   (reduction-relation
    lambda-gc
 
-   (---> (letrec Heap in (in-hole Ctxt Hval))
+   (--> (letrec Heap in (in-hole Ctxt Hval))
          ;; We use append rather than cons (here and in the app rule)
          ;; to match the semantics of the paper, where new bindings
          ;; get added at the end of the heap rather than the
@@ -39,11 +39,11 @@
          (where Var ,(variable-not-in (term Heap) (term Var)))
          "alloc")
 
-   (---> (letrec Heap in (in-hole Ctxt (Proj Var)))
+   (--> (letrec Heap in (in-hole Ctxt (Proj Var)))
          (letrec Heap in (in-hole Ctxt (project Proj Heap Var))) 
          "proj")
 
-   (---> (letrec Heap in (in-hole Ctxt (Var_1 Var_2)))
+   (--> (letrec Heap in (in-hole Ctxt (Var_1 Var_2)))
          (letrec
              ,(append (term Heap)
                       ;; New binding on the heap: the equivalent of
@@ -62,9 +62,7 @@
          ;; Make sure that Var is a fresh variable, so we don't
          ;; conflict with bindings already in the heap.
          (where Var ,(variable-not-in (term Heap) (term Var)))
-         "app")
-   with
-   [(--> (in-hole Ctxt a) (in-hole Ctxt b)) (---> a b)]))
+         "app")))
 
 (define-metafunction lambda-gc
   project : Proj Heap Var -> Var
