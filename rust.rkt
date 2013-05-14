@@ -165,15 +165,15 @@
 
    ;; Allocate Hvals on the heap.
    (--> (Items Heap
-                (in-hole EvalCtxt
-                         Hval))
-         (Items ,(append (term Heap) `((,(term Var) ,(term Hval))))
-                (in-hole EvalCtxt
-                         Var))
-         ;; Make sure that Var is a fresh variable, so we don't
-         ;; conflict with bindings already in the heap.
-         (where Var ,(variable-not-in (term Heap) (term Var)))
-         "Alloc")
+               (in-hole EvalCtxt
+                        Hval))
+        (Items ,(append (term Heap) `((,(term Var) ,(term Hval))))
+               (in-hole EvalCtxt
+                        Var))
+        ;; Make sure that Var is a fresh variable, so we don't
+        ;; conflict with bindings already in the heap.
+        (where Var ,(variable-not-in (term Heap) (term Var)))
+        "Alloc")
 
    ;; If we get to a (Var_1 Var_2) function application, then Var_1 is
    ;; going to point to some function in Items, and Var_2 is going to
@@ -181,61 +181,61 @@
    ;; -- they're not first-class -- and Var_1 can't point to an hval
    ;; because they can't be functions.)
    (--> (Items Heap
-                (in-hole EvalCtxt
-                         (Var_1 Var_2)))
-         (Items ,(append (term Heap)
-                         ;; Put a new binding on the heap
-                         `((,(term Var) ,(term (heap-lookup Heap Var_2)))))
+               (in-hole EvalCtxt
+                        (Var_1 Var_2)))
+        (Items ,(append (term Heap)
+                        ;; Put a new binding on the heap
+                        `((,(term Var) ,(term (heap-lookup Heap Var_2)))))
 
-                ;; Expr is the body of the function Var_1 points to
-                ;; (henceforth "f").  We put Expr in the evaluation
-                ;; context, replacing any free occurrences of Var_3
-                ;; (which is f's formal parameter) with the fresh name
-                ;; Var.
-                (in-hole EvalCtxt
-                         (subst Expr Var_3 Var)))
+               ;; Expr is the body of the function Var_1 points to
+               ;; (henceforth "f").  We put Expr in the evaluation
+               ;; context, replacing any free occurrences of Var_3
+               ;; (which is f's formal parameter) with the fresh name
+               ;; Var.
+               (in-hole EvalCtxt
+                        (subst Expr Var_3 Var)))
 
-         ;; Var_1 should already be the name of some function in
-         ;; Items.
-         (where (fn (type Ty_1 -> Ty_2) (param Var_3) Expr)
-                (item-lookup Items Var_1))
+        ;; Var_1 should already be the name of some function in
+        ;; Items.
+        (where (fn (type Ty_1 -> Ty_2) (param Var_3) Expr)
+               (item-lookup Items Var_1))
 
-         ;; Make sure that Var is really a fresh name, so we don't
-         ;; conflict with bindings already in the heap.
-         (where Var ,(variable-not-in (term Heap) (term Var)))
-         "App")
+        ;; Make sure that Var is really a fresh name, so we don't
+        ;; conflict with bindings already in the heap.
+        (where Var ,(variable-not-in (term Heap) (term Var)))
+        "App")
    
    (--> (Items Heap
-          (in-hole EvalCtxt
-                   (Unary Var)))
-         (Items Heap
-          (in-hole EvalCtxt
-                   (lookup-op Unary Heap Var)))
-         "UnaryOp")
+               (in-hole EvalCtxt
+                        (Unary Var)))
+        (Items Heap
+               (in-hole EvalCtxt
+                        (lookup-op Unary Heap Var)))
+        "UnaryOp")
 
    (--> (Items Heap
-          (in-hole EvalCtxt
-                   (Var_1 Binary Var_2)))
-         (Items Heap
-          (in-hole EvalCtxt
-                   (lookup-op Binary Heap Var_1 Var_2)))
-         "BinaryOp")
+               (in-hole EvalCtxt
+                        (Var_1 Binary Var_2)))
+        (Items Heap
+               (in-hole EvalCtxt
+                        (lookup-op Binary Heap Var_1 Var_2)))
+        "BinaryOp")
 
    (--> (Items Heap
-          (in-hole EvalCtxt
-                   (deref Var))) 
-         (Items Heap
-          (in-hole EvalCtxt
-                   (lookup-deref Heap Var)))
-         "Deref")
+               (in-hole EvalCtxt
+                        (deref Var))) 
+        (Items Heap
+               (in-hole EvalCtxt
+                        (lookup-deref Heap Var)))
+        "Deref")
 
    (--> (Items Heap
-          (in-hole EvalCtxt
-                   (index Var_1 Var_2)))
-         (Items Heap
-          (in-hole EvalCtxt
-                   (lookup-index Heap Var_1 Var_2)))
-         "Index")))
+               (in-hole EvalCtxt
+                        (index Var_1 Var_2)))
+        (Items Heap
+               (in-hole EvalCtxt
+                        (lookup-index Heap Var_1 Var_2)))
+        "Index")))
 
 (define-metafunction baby-rust
   heap-lookup : Heap Var -> Hval
