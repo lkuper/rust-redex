@@ -164,7 +164,7 @@
    ;; Program -> Program/Result
 
    ;; Allocate Hvals on the heap.
-   (---> (Items Heap
+   (--> (Items Heap
                 (in-hole EvalCtxt
                          Hval))
          (Items ,(append (term Heap) `((,(term Var) ,(term Hval))))
@@ -180,7 +180,7 @@
    ;; point to some hval in the heap.  (Var_2 can't point to an Item
    ;; -- they're not first-class -- and Var_1 can't point to an hval
    ;; because they can't be functions.)
-   (---> (Items Heap
+   (--> (Items Heap
                 (in-hole EvalCtxt
                          (Var_1 Var_2)))
          (Items ,(append (term Heap)
@@ -205,7 +205,7 @@
          (where Var ,(variable-not-in (term Heap) (term Var)))
          "App")
    
-   (---> (Items Heap
+   (--> (Items Heap
           (in-hole EvalCtxt
                    (Unary Var)))
          (Items Heap
@@ -213,7 +213,7 @@
                    (lookup-op Unary Heap Var)))
          "UnaryOp")
 
-   (---> (Items Heap
+   (--> (Items Heap
           (in-hole EvalCtxt
                    (Var_1 Binary Var_2)))
          (Items Heap
@@ -221,7 +221,7 @@
                    (lookup-op Binary Heap Var_1 Var_2)))
          "BinaryOp")
 
-   (---> (Items Heap
+   (--> (Items Heap
           (in-hole EvalCtxt
                    (deref Var))) 
          (Items Heap
@@ -229,16 +229,13 @@
                    (lookup-deref Heap Var)))
          "Deref")
 
-   (---> (Items Heap
+   (--> (Items Heap
           (in-hole EvalCtxt
                    (index Var_1 Var_2)))
          (Items Heap
           (in-hole EvalCtxt
                    (lookup-index Heap Var_1 Var_2)))
-         "Index")
-
-   with
-   [(--> (in-hole EvalCtxt a) (in-hole EvalCtxt b)) (---> a b)]))
+         "Index")))
 
 (define-metafunction baby-rust
   heap-lookup : Heap Var -> Hval
