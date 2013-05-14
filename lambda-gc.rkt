@@ -27,42 +27,42 @@
    lambda-gc
 
    (--> (letrec Heap in (in-hole Ctxt Hval))
-         ;; We use append rather than cons (here and in the app rule)
-         ;; to match the semantics of the paper, where new bindings
-         ;; get added at the end of the heap rather than the
-         ;; beginning.
-         (letrec ,(append (term Heap) `((,(term Var) ,(term Hval))))
-           in (in-hole Ctxt Var))
+        ;; We use append rather than cons (here and in the app rule)
+        ;; to match the semantics of the paper, where new bindings
+        ;; get added at the end of the heap rather than the
+        ;; beginning.
+        (letrec ,(append (term Heap) `((,(term Var) ,(term Hval))))
+          in (in-hole Ctxt Var))
 
-         ;; Make sure that Var is a fresh variable, so we don't
-         ;; conflict with bindings already in the heap.
-         (where Var ,(variable-not-in (term Heap) (term Var)))
-         "alloc")
+        ;; Make sure that Var is a fresh variable, so we don't
+        ;; conflict with bindings already in the heap.
+        (where Var ,(variable-not-in (term Heap) (term Var)))
+        "alloc")
 
    (--> (letrec Heap in (in-hole Ctxt (Proj Var)))
-         (letrec Heap in (in-hole Ctxt (project Proj Heap Var))) 
-         "proj")
+        (letrec Heap in (in-hole Ctxt (project Proj Heap Var))) 
+        "proj")
 
    (--> (letrec Heap in (in-hole Ctxt (Var_1 Var_2)))
-         (letrec
-             ,(append (term Heap)
-                      ;; New binding on the heap: the equivalent of
-                      ;; {z = H(y)} from the paper.
-                      `((,(term Var) ,(term (heap-lookup Heap Var_2)))))
+        (letrec
+            ,(append (term Heap)
+                     ;; New binding on the heap: the equivalent of
+                     ;; {z = H(y)} from the paper.
+                     `((,(term Var) ,(term (heap-lookup Heap Var_2)))))
 
-           ;; Put Exp in the evaluation context, replacing any
-           ;; occurrences of Var_3 (the binder from the lambda
-           ;; expression on the heap) with our fresh variable Var.
-           in (in-hole Ctxt (subst Exp Var_3 Var)))
+          ;; Put Exp in the evaluation context, replacing any
+          ;; occurrences of Var_3 (the binder from the lambda
+          ;; expression on the heap) with our fresh variable Var.
+          in (in-hole Ctxt (subst Exp Var_3 Var)))
 
-         ;; Var_1 should already be bound to a lambda expression in
-         ;; the heap.
-         (where (lambda (Var_3) Exp) (heap-lookup Heap Var_1))
+        ;; Var_1 should already be bound to a lambda expression in
+        ;; the heap.
+        (where (lambda (Var_3) Exp) (heap-lookup Heap Var_1))
 
-         ;; Make sure that Var is a fresh variable, so we don't
-         ;; conflict with bindings already in the heap.
-         (where Var ,(variable-not-in (term Heap) (term Var)))
-         "app")))
+        ;; Make sure that Var is a fresh variable, so we don't
+        ;; conflict with bindings already in the heap.
+        (where Var ,(variable-not-in (term Heap) (term Var)))
+        "app")))
 
 (define-metafunction lambda-gc
   project : Proj Heap Var -> Var
